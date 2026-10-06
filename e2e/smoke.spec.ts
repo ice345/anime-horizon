@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 
+// These specs assert on the Simplified Chinese UI; e2e/i18n.spec.ts covers English and Japanese.
+test.use({ locale: 'zh-CN' });
+
 test.beforeEach(async ({ page }) => {
   await page.route('https://graphql.anilist.co', async (route) => {
     await route.fulfill({
@@ -11,9 +14,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('loads the app shell and supports direct archive navigation', async ({ page }) => {
+  // The legacy /archive path redirects to My Anime.
   await page.goto('/archive');
-  await expect(page.getByText('ANIME')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '我的动画年鉴' })).toBeVisible();
+  await expect(page).toHaveURL(/\/my-anime$/);
+  await expect(page.getByRole('link', { name: 'ANIME HORIZON' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '我的番剧' })).toBeVisible();
 });
 
 test('closes a modal with Escape and restores focus to its trigger', async ({ page }) => {

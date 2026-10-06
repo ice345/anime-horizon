@@ -49,8 +49,10 @@ describe('archive SQL backup', () => {
       '`anilist_id`, `unsafe_column`'
     );
 
-    expect(() => parseArchiveSql(sql)).toThrow('字段');
-    expect(() => parseArchiveSql(`-- \`anime_archive\`\n${'x'.repeat(MAX_SQL_IMPORT_BYTES + 1)}`)).toThrow('超过 5 MB');
+    expect(() => parseArchiveSql(sql)).toThrow(expect.objectContaining({ code: 'columnMismatch' }));
+    expect(() => parseArchiveSql(`-- \`anime_archive\`\n${'x'.repeat(MAX_SQL_IMPORT_BYTES + 1)}`)).toThrow(
+      expect.objectContaining({ code: 'tooLarge' })
+    );
   });
 
   it('caps the number of imported rows', () => {
@@ -58,6 +60,6 @@ describe('archive SQL backup', () => {
       Array.from({ length: 2_001 }, (_, index) => ({ ...sourceAnime, id: String(index + 1) }))
     );
 
-    expect(() => parseArchiveSql(sql)).toThrow('行数');
+    expect(() => parseArchiveSql(sql)).toThrow(expect.objectContaining({ code: 'tooManyRows' }));
   });
 });

@@ -20,8 +20,9 @@ describe('shared anime schemas', () => {
       title: { native: '测试作品', romaji: 'Test Work', english: '' },
       coverImage: { large: 'https://example.com/cover.jpg' },
       userStatus: 'PLAN',
-      userReaction: 'NEUTRAL',
     });
+    // No reaction in the source means no reaction recorded, not NEUTRAL.
+    expect(normalizeAnimeRecord(record()).userReaction).toBeUndefined();
   });
 
   it('rejects malformed or oversized external data at the boundary', () => {
@@ -40,7 +41,7 @@ describe('JSON backup migration', () => {
       config: { itemsPerSeason: 30, startYear: 2010, endYear: 2024 },
     });
 
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(4);
     expect(migrated.userSelection).toEqual(['101', '202']);
     expect(migrated.userDetails).toHaveLength(1);
     expect(migrated.currentViewData[0].id).toBe('303');
@@ -48,13 +49,15 @@ describe('JSON backup migration', () => {
   });
 
   it('rejects unsupported versions and invalid records without partial state', () => {
-    expect(() => parseAndMigrateBackup({ version: 99 })).toThrow('不支持的备份版本');
+    expect(() => parseAndMigrateBackup({ version: 99 })).toThrow(
+      expect.objectContaining({ code: 'unsupportedVersion' })
+    );
     expect(() => parseAndMigrateBackup({ version: 2, userDetails: [{ id: 'broken' }] })).toThrow();
   });
 
   it('creates the current backup envelope', () => {
     const backup = createBackup({ userSelection: [], userDetails: [], currentViewData: [], config: {} });
-    expect(backup.version).toBe(2);
+    expect(backup.version).toBe(4);
     expect(() => new Date(backup.timestamp).toISOString()).not.toThrow();
   });
 });

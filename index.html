@@ -1,18 +1,24 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Anime Horizon - 动画生涯编年史</title>
-    <meta name="description" content="Anime Horizon 是一个新番导视、补番记录、二次元偏好测评与小游戏网站。" />
+    <title>Anime Horizon</title>
+    <meta
+      name="description"
+      content="Browse each anime season, keep a personal archive of what you watch, and look back on your taste."
+    />
     <meta name="theme-color" content="#fbfaf7" />
     <link rel="icon" href="/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/favicon.png" />
     <meta property="og:title" content="Anime Horizon" />
-    <meta property="og:description" content="新番导视、补番记录、偏好测评与小游戏。" />
+    <meta
+      property="og:description"
+      content="Seasonal anime guide and personal anime archive in English, 日本語 and 简体中文."
+    />
     <meta property="og:type" content="website" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Outfit:wght@400;500;600;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -20,11 +26,18 @@
         --ah-paper: #fbfaf7;
         --ah-surface: #fffefd;
         --ah-surface-blue: #f2f7fb;
-        --ah-primary: #629fdc;
+        /* Text, links and filled buttons: >= 4.5:1 on paper, surface and pale-blue panels. */
+        --ah-primary: #3870a9;
+        --ah-primary-strong: #2f6399;
+        /* The original airy sky blue, kept for decorative fills and shadows only. */
+        --ah-sky-tint: #629fdc;
         --ah-primary-soft: #dceafa;
         --ah-ink: #26364d;
-        --ah-muted: #75849a;
+        --ah-muted: #5f6e83;
+        /* Blush pink is decorative only; use --ah-rose for pink text or filled controls. */
         --ah-pink: #e8aeb8;
+        --ah-rose: #b04a62;
+        --ah-rose-strong: #943d52;
         --ah-border: rgba(91, 124, 160, 0.14);
         --ah-page-width: 1280px;
         --ah-radius-sm: 8px;
@@ -92,8 +105,11 @@
       .ah-focus-ring:focus-visible,
       button:focus-visible,
       select:focus-visible,
-      input:focus-visible {
-        outline: 3px solid rgba(98, 159, 220, 0.42);
+      input:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--ah-primary);
         outline-offset: 3px;
       }
 

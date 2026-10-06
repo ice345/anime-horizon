@@ -1,21 +1,27 @@
-import React, { useState } from 'react';
-import { Anime, SEASON_CN, UserAnimeReaction, UserAnimeStatus } from '../types';
+import React, { useId, useState } from 'react';
+import { Anime, UserAnimeReaction, UserAnimeStatus } from '../types';
+import { ArchiveEntryEdit, MAX_ARCHIVE_NOTE_LENGTH, normalizeReaction } from '../features/archive/archiveOperations';
+import { emptyUserHistory, HistoryDate, parseHistoryDateInput, toEditableHistoryDate } from '../shared/schemas/history';
+import { formatHistoryDate } from '../shared/i18n/dates';
+import { useI18n } from '../shared/i18n/useI18n';
+import { getDisplayTitles } from '../shared/i18n/animeTitle';
+import { airingKey, reactionKey, seasonNameKey, statusKey } from '../shared/i18n/keys';
 
 interface AnimeCardProps {
   anime: Anime;
   selected: boolean;
-  onToggle: () => void;
+  /** Catalogue mode: the card body adds or removes the title. */
+  onToggle?: () => void;
+  /**
+   * Archive mode: the card body is not interactive and removal is only reachable
+   * through the explicit, confirmed remove control.
+   */
+  onRemove?: () => void;
   onSetStatus?: (status: UserAnimeStatus) => void;
-  onSetReview?: (review: { reaction: UserAnimeReaction; note: string }) => void;
+  /** Saves the note panel: reaction, note and any corrected history dates. */
+  onSetReview?: (edit: ArchiveEntryEdit) => void;
   view?: 'grid' | 'list';
 }
-
-const statusText: Record<string, string> = {
-  RELEASING: '播出中',
-  FINISHED: '已完结',
-  NOT_YET_RELEASED: '即将播出',
-  HIATUS: '暂停中',
-};
 
 const BookmarkIcon = ({ filled }: { filled: boolean }) => (
   <svg
@@ -30,67 +36,122 @@ const BookmarkIcon = ({ filled }: { filled: boolean }) => (
   </svg>
 );
 
-const userStatusOptions: Array<{ value: UserAnimeStatus; label: string }> = [
-  { value: 'PLAN', label: '想看' },
-  { value: 'WATCHING', label: '追更' },
-  { value: 'COMPLETED', label: '已看完' },
-];
+const USER_STATUSES: UserAnimeStatus[] = ['PLAN', 'WATCHING', 'COMPLETED'];
+const REACTIONS: UserAnimeReaction[] = ['LOVE', 'LIKE', 'NEUTRAL', 'DISLIKE', 'HATE'];
 
-const reactionOptions: Array<{ value: UserAnimeReaction; label: string }> = [
-  { value: 'LOVE', label: '非常喜欢' },
-  { value: 'LIKE', label: '喜欢' },
-  { value: 'NEUTRAL', label: '一般' },
-  { value: 'DISLIKE', label: '不太喜欢' },
-  { value: 'HATE', label: '不喜欢' },
-];
-
-const reactionText: Record<UserAnimeReaction, string> = {
-  LOVE: '非常喜欢',
-  LIKE: '喜欢',
-  NEUTRAL: '未标记感受',
-  DISLIKE: '不太喜欢',
-  HATE: '不喜欢',
-};
+const CardBody: React.FC<{
+  isArchiveEntry: boolean;
+  selected: boolean;
+  onToggle?: () => void;
+  label: string;
+  className: string;
+  children: React.ReactNode;
+}> = ({ isArchiveEntry, selected, onToggle, label, className, children }) =>
+  isArchiveEntry || !onToggle || selected ? (
+    // Cover and title are content, never a removal shortcut: inside My Anime, and for titles already
+    // saved when shown elsewhere (removal is an explicit, confirmed action in My Anime).
+    <div className={className}>{children}</div>
+  ) : (
+    <button type="button" onClick={onToggle} aria-pressed={selected} aria-label={label} className={className}>
+      {children}
+    </button>
+  );
 
 export const AnimeCard: React.FC<AnimeCardProps> = ({
   anime,
   selected,
   onToggle,
+  onRemove,
   onSetStatus,
   onSetReview,
   view = 'grid',
 }) => {
-  const displayTitle = anime.title.native || anime.title.romaji || anime.title.english;
-  const subTitle = anime.title.romaji !== displayTitle ? anime.title.romaji : anime.title.english;
+  const { t, formatScore, locale } = useI18n();
+  const isArchiveEntry = Boolean(onRemove);
+  const titles = getDisplayTitles(anime, locale);
+  const displayTitle = titles.primary || t('common.untitled');
+  const subTitle = titles.secondary;
   const coverUrl = anime.coverImage.extraLarge || anime.coverImage.large;
-  const status = statusText[anime.status || ''] || anime.format || '动画';
+  const airing = airingKey(anime.status);
+  const status = airing ? t(airing) : anime.format || t('common.anime');
   const isList = view === 'list';
   const userStatus = anime.userStatus || 'PLAN';
-  const userReaction = anime.userReaction || 'NEUTRAL';
+  // Undefined means no reaction recorded, which is shown as such and never as "okay".
+  const userReaction = normalizeReaction(anime.userReaction);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [isConfirmingRemoval, setIsConfirmingRemoval] = useState(false);
+  const history = anime.userHistory ?? emptyUserHistory();
+  const historyId = useId();
   const [reviewDraft, setReviewDraft] = useState<{
-    reaction: UserAnimeReaction;
+    reaction: UserAnimeReaction | null;
     note: string;
+    startedAt: string;
+    completedAt: string;
   } | null>(null);
-  const reactionDraft = reviewDraft?.reaction || userReaction;
+  const [dateErrors, setDateErrors] = useState<{
+    startedAt?: 'invalid' | 'future';
+    completedAt?: 'invalid' | 'future';
+  }>({});
+  const reactionDraft = reviewDraft ? reviewDraft.reaction : (userReaction ?? null);
   const noteDraft = reviewDraft?.note ?? '';
+  const historyText = (value: HistoryDate | null) =>
+    value ? formatHistoryDate(value, locale) : t('card.history.unknown');
+
+  const openReview = () => {
+    setReviewDraft({
+      reaction: userReaction ?? null,
+      note: anime.userNote || '',
+      startedAt: toEditableHistoryDate(history.startedAt),
+      completedAt: toEditableHistoryDate(history.completedAt),
+    });
+    setDateErrors({});
+    setIsReviewOpen(true);
+  };
+
+  const closeReview = () => {
+    setIsReviewOpen(false);
+    setReviewDraft(null);
+    setDateErrors({});
+  };
+
+  /** Unchanged text keeps the stored value, so reopening and saving never downgrades a precise timestamp. */
+  const resolveDate = (field: 'startedAt' | 'completedAt', text: string) => {
+    if (text === toEditableHistoryDate(history[field])) return { value: history[field] };
+    return parseHistoryDateInput(text, new Date());
+  };
 
   const saveReview = () => {
     if (!reviewDraft) return;
-    onSetReview?.({ reaction: reactionDraft, note: noteDraft.trim().slice(0, 280) });
-    setIsReviewOpen(false);
-    setReviewDraft(null);
+    const started = resolveDate('startedAt', reviewDraft.startedAt);
+    const completed = resolveDate('completedAt', reviewDraft.completedAt);
+    if ('error' in started || 'error' in completed) {
+      setDateErrors({
+        startedAt: 'error' in started ? started.error : undefined,
+        completedAt: 'error' in completed ? completed.error : undefined,
+      });
+      return;
+    }
+    onSetReview?.({
+      reaction: reactionDraft,
+      note: noteDraft.trim().slice(0, MAX_ARCHIVE_NOTE_LENGTH),
+      startedAt: started.value,
+      completedAt: completed.value,
+    });
+    closeReview();
   };
+
+  const updateDraft = (patch: Partial<NonNullable<typeof reviewDraft>>) =>
+    setReviewDraft((previous) => (previous ? { ...previous, ...patch } : previous));
 
   return (
     <article
       className={`overflow-hidden border border-yearbook-line bg-yearbook-surface shadow-[0_8px_24px_rgba(59,95,132,0.055)] transition duration-200 hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_14px_32px_rgba(59,95,132,0.12)] ${isList ? 'rounded-[var(--ah-radius-md)]' : 'rounded-[var(--ah-radius-md)]'}`}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-pressed={selected}
-        aria-label={`${selected ? '从年鉴移除' : '加入年鉴'}：${displayTitle}`}
+      <CardBody
+        isArchiveEntry={isArchiveEntry}
+        selected={selected}
+        onToggle={onToggle}
+        label={t('card.add', { title: displayTitle })}
         className={`group relative w-full text-left ${isList ? 'flex min-h-36' : ''}`}
       >
         <div
@@ -122,7 +183,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               {subTitle && <p className="mt-1 line-clamp-1 text-[11px] text-yearbook-muted">{subTitle}</p>}
             </div>
             <span
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition ${selected ? 'bg-rose-50 text-yearbook-pink' : 'text-yearbook-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'}`}
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition ${selected ? 'bg-rose-50 text-yearbook-rose' : 'text-yearbook-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'}`}
             >
               <BookmarkIcon filled={selected} />
             </span>
@@ -131,42 +192,50 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           <div
             className={`mt-3 flex items-center justify-between gap-3 text-[11px] text-yearbook-muted ${isList ? 'sm:mt-4' : ''}`}
           >
-            <span className="truncate">{anime.genres.slice(0, 2).join(' · ') || anime.format || '动画'}</span>
+            <span className="truncate">
+              {anime.genres.slice(0, 2).join(' · ') || anime.format || t('common.anime')}
+            </span>
             {anime.averageScore && (
-              <span className="shrink-0 font-medium text-yearbook-sky">{anime.averageScore}%</span>
+              <span className="shrink-0 font-medium text-yearbook-sky">{formatScore(anime.averageScore)}</span>
             )}
           </div>
+          {selected && !isArchiveEntry && (
+            <p className="mt-2 text-[11px] font-medium text-yearbook-rose">{t('card.inMyAnime')}</p>
+          )}
           {isList && (
             <div className="mt-2 space-y-1.5 text-xs leading-5 text-yearbook-muted">
               <p>
-                {anime.seasonYear || '年份未知'} · {anime.season ? SEASON_CN[anime.season].split(' ')[0] : '季度未知'} ·{' '}
-                {anime.format || '动画'}
-                {anime.episodes ? ` · ${anime.episodes} 集` : ''}
-                {anime.duration ? ` · ${anime.duration} 分钟` : ''}
+                {anime.seasonYear || t('common.unknownYear')} ·{' '}
+                {anime.season ? t(seasonNameKey(anime.season)) : t('common.unknownSeason')} ·{' '}
+                {anime.format || t('common.anime')}
+                {anime.episodes ? ` · ${t('card.episodes', { count: anime.episodes })}` : ''}
+                {anime.duration ? ` · ${t('card.minutes', { count: anime.duration })}` : ''}
               </p>
-              {anime.studios?.length ? <p>制作：{anime.studios.slice(0, 2).join(' / ')}</p> : null}
+              {anime.studios?.length ? (
+                <p>{t('card.studios', { names: anime.studios.slice(0, 2).join(' / ') })}</p>
+              ) : null}
               <p className="line-clamp-2">
-                {anime.description?.replace(/<[^>]+>/g, '') || '将这部作品收进你的年鉴，留下自己的观看记录。'}
+                {anime.description?.replace(/<[^>]+>/g, '') || t('card.descriptionFallback')}
               </p>
             </div>
           )}
         </div>
-      </button>
+      </CardBody>
 
       {selected && onSetStatus && (
         <div className="border-t border-yearbook-line bg-yearbook-paper/60">
-          <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-xs text-yearbook-muted">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3.5 py-2.5 text-xs text-yearbook-muted">
             <label className="flex min-w-0 items-center gap-2">
-              <span className="shrink-0">我的状态</span>
+              <span className="shrink-0">{t('status.label')}</span>
               <select
                 value={userStatus}
                 onChange={(event) => onSetStatus(event.target.value as UserAnimeStatus)}
-                aria-label={`${displayTitle} 的观看状态`}
+                aria-label={t('card.statusAria', { title: displayTitle })}
                 className="border-0 bg-transparent py-1 text-sm font-medium text-yearbook-ink outline-none"
               >
-                {userStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {USER_STATUSES.map((value) => (
+                  <option key={value} value={value}>
+                    {t(statusKey(value))}
                   </option>
                 ))}
               </select>
@@ -174,26 +243,63 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
             {onSetReview && (
               <button
                 type="button"
-                onClick={() => {
-                  if (isReviewOpen) {
-                    setIsReviewOpen(false);
-                    setReviewDraft(null);
-                    return;
-                  }
-                  setReviewDraft({ reaction: userReaction, note: anime.userNote || '' });
-                  setIsReviewOpen(true);
-                }}
+                onClick={() => (isReviewOpen ? closeReview() : openReview())}
                 aria-expanded={isReviewOpen}
-                className="shrink-0 text-sm font-medium text-yearbook-sky transition hover:text-yearbook-ink"
+                className="inline-flex min-h-11 shrink-0 items-center text-sm font-medium text-yearbook-sky transition hover:text-yearbook-ink"
               >
-                {isReviewOpen ? '收起' : anime.userNote || userReaction !== 'NEUTRAL' ? '编辑点评' : '写点评'}
+                {isReviewOpen
+                  ? t('card.collapse')
+                  : anime.userNote || userReaction
+                    ? t('card.editReview')
+                    : t('card.writeReview')}
+              </button>
+            )}
+            {onRemove && !isConfirmingRemoval && (
+              <button
+                type="button"
+                onClick={() => setIsConfirmingRemoval(true)}
+                aria-label={t('card.removeAria', { title: displayTitle })}
+                className="inline-flex min-h-11 shrink-0 items-center text-sm text-yearbook-muted underline decoration-yearbook-line underline-offset-4 transition hover:text-yearbook-rose"
+              >
+                {t('card.removeShort')}
               </button>
             )}
           </div>
 
-          {!isReviewOpen && (anime.userNote || userReaction !== 'NEUTRAL') && (
+          {onRemove && isConfirmingRemoval && (
+            <div
+              role="group"
+              aria-label={t('card.confirmAria', { title: displayTitle })}
+              className="space-y-2 border-t border-rose-200 bg-rose-50/80 px-3.5 py-3 text-xs leading-5 text-yearbook-ink"
+            >
+              <p>{t('card.confirmText')}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsConfirmingRemoval(false);
+                    onRemove();
+                  }}
+                  className="min-h-11 bg-yearbook-rose px-3 text-sm font-medium text-white transition hover:bg-yearbook-rose-strong"
+                >
+                  {t('card.confirmRemove')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingRemoval(false)}
+                  className="inline-flex min-h-11 items-center px-1 text-sm font-medium text-yearbook-sky transition hover:text-yearbook-ink"
+                >
+                  {t('card.keep')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isReviewOpen && (anime.userNote || userReaction) && (
             <div className="border-t border-yearbook-line/70 px-3.5 py-2.5 text-xs leading-5 text-yearbook-muted">
-              <p className="font-medium text-yearbook-ink">{reactionText[userReaction]}</p>
+              <p className="font-medium text-yearbook-ink">
+                {userReaction ? t(reactionKey(userReaction)) : t('reaction.unrated')}
+              </p>
               {anime.userNote && <p className="mt-1 line-clamp-3">{anime.userNote}</p>}
             </div>
           )}
@@ -201,50 +307,89 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
           {isReviewOpen && onSetReview && (
             <div className="space-y-2.5 border-t border-yearbook-line px-3.5 py-3">
               <label className="block text-xs text-yearbook-muted">
-                <span className="mb-1.5 block">看后感受</span>
+                <span className="mb-1.5 block">{t('reaction.label')}</span>
                 <select
-                  value={reactionDraft}
+                  value={reactionDraft ?? ''}
                   onChange={(event) =>
-                    setReviewDraft((previous) => ({
-                      reaction: event.target.value as UserAnimeReaction,
-                      note: previous?.note ?? noteDraft,
-                    }))
+                    updateDraft({ reaction: (event.target.value || null) as UserAnimeReaction | null })
                   }
-                  aria-label={`${displayTitle} 的喜欢程度`}
+                  aria-label={t('card.reactionAria', { title: displayTitle })}
                   className="w-full border border-yearbook-line bg-white px-2.5 py-2 text-sm text-yearbook-ink outline-none transition focus:border-yearbook-sky"
                 >
-                  {reactionOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                  <option value="">{t('reaction.unrated')}</option>
+                  {REACTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {t(reactionKey(value))}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="block text-xs text-yearbook-muted">
-                <span className="mb-1.5 block">一句短评</span>
+                <span className="mb-1.5 block">{t('card.noteLabel')}</span>
                 <textarea
                   value={noteDraft}
-                  onChange={(event) =>
-                    setReviewDraft((previous) => ({
-                      reaction: previous?.reaction ?? reactionDraft,
-                      note: event.target.value,
-                    }))
-                  }
-                  maxLength={280}
+                  onChange={(event) => updateDraft({ note: event.target.value })}
+                  maxLength={MAX_ARCHIVE_NOTE_LENGTH}
                   rows={3}
-                  aria-label={`${displayTitle} 的短评`}
-                  placeholder="留下你想记住的一句话"
+                  aria-label={t('card.noteAria', { title: displayTitle })}
+                  placeholder={t('card.notePlaceholder')}
                   className="w-full resize-y border border-yearbook-line bg-white px-2.5 py-2 text-sm leading-5 text-yearbook-ink outline-none transition placeholder:text-yearbook-muted/70 focus:border-yearbook-sky"
                 />
               </label>
+              <div
+                role="group"
+                aria-labelledby={`${historyId}-title`}
+                className="space-y-2 border-t border-yearbook-line/70 pt-2.5 text-xs text-yearbook-muted"
+              >
+                <p id={`${historyId}-title`} className="font-medium text-yearbook-ink">
+                  {t('card.history.title')}
+                </p>
+                <p className="flex flex-wrap justify-between gap-x-2">
+                  <span>{t('card.history.added')}</span>
+                  <span className="text-yearbook-ink">{historyText(history.addedAt)}</span>
+                </p>
+                {(['startedAt', 'completedAt'] as const).map((field) => {
+                  const error = dateErrors[field];
+                  const inputId = `${historyId}-${field}`;
+                  return (
+                    <div key={field}>
+                      <label htmlFor={inputId} className="mb-1 flex flex-wrap justify-between gap-x-2">
+                        <span>{t(field === 'startedAt' ? 'card.history.started' : 'card.history.completed')}</span>
+                        <span className="text-yearbook-ink">{historyText(history[field])}</span>
+                      </label>
+                      <input
+                        id={inputId}
+                        type="text"
+                        autoComplete="off"
+                        value={reviewDraft?.[field] ?? ''}
+                        onChange={(event) => updateDraft({ [field]: event.target.value })}
+                        placeholder="YYYY-MM-DD"
+                        aria-invalid={Boolean(error)}
+                        aria-describedby={`${historyId}-hint${error ? ` ${inputId}-error` : ''}`}
+                        className={`w-full border bg-white px-2.5 py-2 text-sm text-yearbook-ink outline-none transition placeholder:text-yearbook-muted/70 focus:border-yearbook-sky ${error ? 'border-rose-400' : 'border-yearbook-line'}`}
+                      />
+                      {error && (
+                        <span id={`${inputId}-error`} role="alert" className="mt-1 block text-rose-700">
+                          {t(error === 'future' ? 'card.history.future' : 'card.history.invalid')}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                <p id={`${historyId}-hint`} className="leading-5">
+                  {t('card.history.hint')}
+                </p>
+              </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-yearbook-muted">{noteDraft.length}/280</span>
+                <span className="text-[11px] text-yearbook-muted">
+                  {t('card.noteCount', { count: noteDraft.length, max: MAX_ARCHIVE_NOTE_LENGTH })}
+                </span>
                 <button
                   type="button"
                   onClick={saveReview}
-                  className="bg-yearbook-sky px-3 py-1.5 text-sm font-medium text-white transition hover:bg-sky-600"
+                  className="bg-yearbook-sky px-3 py-1.5 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong"
                 >
-                  保存点评
+                  {t('card.saveReview')}
                 </button>
               </div>
             </div>

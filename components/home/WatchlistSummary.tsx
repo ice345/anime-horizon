@@ -1,128 +1,98 @@
-import React from 'react';
-import { TasteProfile } from '../../services/tasteProfile';
-import { Anime, UserAnimeStatus } from '../../types';
-import { TasteMethodDetails } from './TasteMethodDetails';
+import React, { useMemo } from 'react';
+import { countByTab } from '../../features/archive/myAnime';
+import { MyAnimeTab } from '../../services/router';
+import { getDisplayTitle } from '../../shared/i18n/animeTitle';
+import { statusKey } from '../../shared/i18n/keys';
+import { useI18n } from '../../shared/i18n/useI18n';
+import { Anime } from '../../types';
 
 interface WatchlistSummaryProps {
   selectedAnime: Anime[];
-  profile: TasteProfile;
-  onOpenArchive: () => void;
-  onAnalyze: () => void;
+  /** Opens My Anime, optionally on a specific status tab. */
+  onOpenMyAnime: (tab?: MyAnimeTab) => void;
 }
 
-const archiveStatusText: Record<UserAnimeStatus, string> = {
-  PLAN: '想看',
-  WATCHING: '追更中',
-  COMPLETED: '已看完',
-};
+const STATUS_TABS: Array<Exclude<MyAnimeTab, 'all'>> = ['watching', 'plan', 'completed'];
+const tabLabelKey = (tab: MyAnimeTab) => `myAnime.tab.${tab}` as const;
 
-export const WatchlistSummary: React.FC<WatchlistSummaryProps> = ({
-  selectedAnime,
-  profile,
-  onOpenArchive,
-  onAnalyze,
-}) => {
-  const countByStatus = (status: UserAnimeStatus) =>
-    selectedAnime.filter((item) => (item.userStatus || 'PLAN') === status).length;
-  const watching = countByStatus('WATCHING');
-  const completed = countByStatus('COMPLETED');
-  const planned = countByStatus('PLAN');
-  const recent = selectedAnime.slice(-3).reverse();
+/**
+ * Discover's shortcut into My Anime: factual status counts and recent activity only. Personal-history
+ * analysis lives in Journey, not on the discovery surface.
+ */
+export const WatchlistSummary: React.FC<WatchlistSummaryProps> = ({ selectedAnime, onOpenMyAnime }) => {
+  const { t, locale } = useI18n();
+  const counts = useMemo(() => countByTab(selectedAnime), [selectedAnime]);
+  const recent = useMemo(
+    () =>
+      selectedAnime
+        .filter((item) => item.userHistory?.updatedAt)
+        .sort((left, right) => Date.parse(right.userHistory!.updatedAt!) - Date.parse(left.userHistory!.updatedAt!))
+        .slice(0, 3),
+    [selectedAnime]
+  );
 
   return (
     <aside
       aria-labelledby="watchlist-title"
       className="self-start rounded-[var(--ah-radius-lg)] border border-rose-100 bg-[linear-gradient(145deg,#fffefd,rgba(253,244,246,0.82))] p-5 shadow-[var(--ah-shadow-soft)] lg:sticky lg:top-5 sm:p-6"
     >
-      <p className="ah-section-label !text-yearbook-pink">My Archive</p>
-      <div className="mt-2 flex items-start justify-between gap-4">
-        <div>
-          <h2 id="watchlist-title" className="font-jp text-2xl font-medium text-yearbook-ink">
-            我的动画年鉴
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-yearbook-muted">
-            每次收录都会进入你的推荐列表，也是鉴赏档案读取的个人资料库。
-          </p>
-        </div>
-        <div className="text-right">
-          <span className="block text-4xl font-medium text-yearbook-pink">{profile.score}</span>
-          <span className="text-[11px] text-yearbook-muted">二次元浓度</span>
-        </div>
-      </div>
+      <p className="ah-section-label !text-yearbook-rose">{t('summary.eyebrow')}</p>
+      <h2 id="watchlist-title" className="mt-2 font-jp text-2xl font-medium text-yearbook-ink">
+        {t('summary.title')}
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-yearbook-muted">{t('summary.description')}</p>
 
-      <div className="mt-4 border-l-2 border-yearbook-pink bg-rose-50/65 px-3 py-2.5">
-        <p className="text-sm font-medium text-yearbook-ink">当前画像：{profile.rank}</p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {profile.labels.map((label) => (
-            <span
-              key={label}
-              title={profile.labelReasons[label]}
-              className="border border-rose-100 bg-white/70 px-2 py-1 text-[11px] text-yearbook-muted"
+      <ul className="mt-5 grid grid-cols-3 border-y border-rose-100 text-center">
+        {STATUS_TABS.map((tab, index) => (
+          <li key={tab} className={index === 1 ? 'border-x border-rose-100' : undefined}>
+            <button
+              type="button"
+              onClick={() => onOpenMyAnime(tab)}
+              aria-label={t('summary.show', { status: t(tabLabelKey(tab)) })}
+              className="flex min-h-16 w-full flex-col items-center justify-center py-3 transition hover:bg-white/60"
             >
-              {label}
-            </span>
-          ))}
-        </div>
-      </div>
+              <span className="text-[11px] text-yearbook-muted">{t(tabLabelKey(tab))}</span>
+              <span className="mt-1 text-lg font-medium text-yearbook-ink">{counts[tab]}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
 
-      <div className="mt-4">
-        <TasteMethodDetails profile={profile} />
-      </div>
+      {selectedAnime.length === 0 ? (
+        <p className="py-4 text-sm leading-6 text-yearbook-muted">{t('summary.empty')}</p>
+      ) : (
+        recent.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-medium text-yearbook-muted">{t('summary.recent')}</p>
+            <ul className="mt-2 space-y-2">
+              {recent.map((item) => (
+                <li key={item.id} className="flex items-center gap-3 py-1">
+                  <img
+                    src={item.coverImage.large || item.coverImage.extraLarge}
+                    alt=""
+                    className="h-10 w-8 rounded-[5px] object-cover"
+                    loading="lazy"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-yearbook-ink">
+                      {getDisplayTitle(item, locale) || t('common.untitled')}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-yearbook-muted">{t(statusKey(item.userStatus || 'PLAN'))}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
+      )}
 
-      <dl className="mt-5 grid grid-cols-3 border-y border-rose-100 py-4 text-center">
-        <div>
-          <dt className="text-[11px] text-yearbook-muted">追更</dt>
-          <dd className="mt-1 text-lg font-medium text-yearbook-ink">{watching}</dd>
-        </div>
-        <div className="border-x border-rose-100">
-          <dt className="text-[11px] text-yearbook-muted">已看完</dt>
-          <dd className="mt-1 text-lg font-medium text-yearbook-ink">{completed}</dd>
-        </div>
-        <div>
-          <dt className="text-[11px] text-yearbook-muted">想看</dt>
-          <dd className="mt-1 text-lg font-medium text-yearbook-ink">{planned}</dd>
-        </div>
-      </dl>
-
-      <div className="mt-4 space-y-2">
-        {recent.length ? (
-          recent.map((item) => (
-            <div key={item.id} className="flex items-center gap-3 rounded-lg py-1">
-              <img
-                src={item.coverImage.large || item.coverImage.extraLarge}
-                alt=""
-                className="h-10 w-8 rounded-[5px] object-cover"
-                loading="lazy"
-              />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-yearbook-ink">
-                  {item.title.native || item.title.romaji}
-                </p>
-                <p className="mt-0.5 text-[11px] text-yearbook-muted">{archiveStatusText[item.userStatus || 'PLAN']}</p>
-              </div>
-            </div>
-          ))
-        ) : (
-          <p className="py-4 text-sm leading-6 text-yearbook-muted">
-            还没有收录。点一部作品，让它成为你年鉴里的第一条推荐。
-          </p>
-        )}
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-rose-100 pt-4">
+      <div className="mt-5 border-t border-rose-100 pt-4">
         <button
           type="button"
-          onClick={onOpenArchive}
-          className="text-sm font-medium text-yearbook-ink underline decoration-rose-200 underline-offset-4 transition hover:text-yearbook-sky"
+          onClick={() => onOpenMyAnime()}
+          className="min-h-11 text-sm font-medium text-yearbook-ink underline decoration-rose-200 underline-offset-4 transition hover:text-yearbook-sky"
         >
-          打开推荐列表
-        </button>
-        <button
-          type="button"
-          onClick={onAnalyze}
-          className="border border-sky-200 bg-white px-3 py-2 text-sm font-medium text-yearbook-sky transition hover:border-sky-300 hover:bg-yearbook-blue"
-        >
-          生成鉴赏档案
+          {t('summary.open')}
         </button>
       </div>
     </aside>
