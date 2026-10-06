@@ -16,6 +16,8 @@
 
 ## AI 代理边界
 
+**v1 默认关闭共享站点 AI。** 代理只有在 `SITE_AI_ENABLED=true` 且配置了 `DEEPSEEK_API_KEY` 时才会调用上游；否则 `POST /api/deepseek/chat` 在通过 Origin 检查后立即返回 `503 AI_NOT_CONFIGURED`（不读请求体、不消耗配额、不调用上游，也不说明具体缺少哪项配置），`GET /api/deepseek/status` 只返回 `{"siteAI":"disabled"}`。前端先查询状态，关闭时不会把 Prompt 上传到本站。原因：当前代理转发的是客户端提供的任意 Prompt，`Origin` 可以伪造，内存配额会在实例重启/休眠时清零，作为匿名公开的付费服务不够安全。以下描述适用于将来显式开启站点 AI 的部署。
+
 `/api/deepseek/chat` 只接受 JSON Prompt，由服务端选择允许的模型并使用 Render 环境中的 `DEEPSEEK_API_KEY` 调用上游。代理不记录 API Key，也不应记录完整 Prompt、用户年鉴或上游原文。
 
 当前代码的保护包括：
@@ -23,25 +25,27 @@
 - `CORS_ORIGINS`/兼容的 `CORS_ORIGIN` 来源白名单；生产环境禁止 `*`。
 - 生产环境默认要求 `Origin` 头（`AI_REQUIRE_ORIGIN`）；缺失时返回 `403 ORIGIN_REQUIRED`。`Origin` 可被非浏览器客户端伪造，不是身份认证。
 - 每 IP 限流的地址来源默认是 TCP 对端；`TRUST_PROXY=<n>` 从 `X-Forwarded-For` 右侧读取，`CLIENT_IP_HEADER` 读取可信边缘写入的单值头。两者都需要按 `docs/deployment.md` 在生产环境验证防伪造。
-- 请求体、Prompt、上游响应大小上限。
+- 请求体、Prompt、上游输出 token（默认 4,000，`AI_MAX_OUTPUT_TOKENS`）和上游响应大小上限。
 - 按 IP 的窗口限流、全局分钟/日配额和全局并发上限。
 - 上游请求超时与安全错误映射；客户端不会收到上游原始错误正文。
 - 固定服务端模型，不接受请求体的 `model` 覆盖。
 - `nosniff`、`frame-ancestors`、`Referrer-Policy`、`Permissions-Policy` 和生产 HSTS 等响应头。
 
-未配置共享存储时，窗口计数仍是单实例内存限制。多实例部署应配置 Upstash Redis REST（或兼容 pipeline 的 Redis REST 网关），让所有实例使用同一组计数器；共享存储不可用时默认 fail-closed，避免故障期间无界放大 AI 费用。
+未配置共享存储时，窗口计数仍是单实例内存限制，而且每次实例重启（包括 Render 免费实例休眠后再启动）都会清零，所以“每日”上限并不可靠。多实例部署应配置 Upstash Redis REST（或兼容 pipeline 的 Redis REST 网关），让所有实例使用同一组计数器；共享存储不可用时默认 fail-closed，避免故障期间无界放大 AI 费用。
 
 ## 生产环境变量
 
-至少配置：
+v1（无共享站点 AI）至少配置：
 
 ```env
 NODE_ENV=production
-DEEPSEEK_API_KEY=...
 CORS_ORIGINS=https://app.example.com
+SITE_AI_ENABLED=false
 ```
 
-可选限制：
+在 Render 上设置 `NODE_ENV=production` 时，构建命令必须是 `npm ci --include=dev && npm run build && npm prune --omit=dev`，否则 npm 会跳过构建所需的 devDependencies（见 `docs/deployment.md`）。
+
+将来开启站点 AI 时追加 `SITE_AI_ENABLED=true`、`DEEPSEEK_API_KEY=...`，以及下面的共享配额配置。可选限制：
 
 ```env
 AI_ALLOWED_MODELS=deepseek-v4-flash
@@ -53,9 +57,10 @@ AI_MAX_BODY_BYTES=131072
 AI_MAX_PROMPT_CHARS=60000
 AI_MAX_RESPONSE_BYTES=512000
 AI_TIMEOUT_MS=45000
+AI_MAX_OUTPUT_TOKENS=4000
 ```
 
-多实例生产环境追加：
+开启站点 AI 时（单实例也建议）追加：
 
 ```env
 AI_QUOTA_REDIS_URL=https://your-database.upstash.io
@@ -70,16 +75,17 @@ AI_QUOTA_TIMEOUT_MS=2000
 
 ## 状态码约定
 
-| 状态码  | 含义                                |
-| ------- | ----------------------------------- |
-| 400     | JSON 无效或缺少 Prompt              |
-| 403     | Origin 不在白名单                   |
-| 408/504 | 当前代理使用 504 表示上游超时       |
-| 413     | 请求体或 Prompt 超限                |
-| 429     | 代理限流、并发已满或上游限流        |
-| 502     | 上游不可用、返回错误或响应过大      |
-| 503     | 服务端没有配置 Key 或共享配额不可用 |
-| 405     | HTTP 方法不支持                     |
+| 状态码  | 含义                                      |
+| ------- | ----------------------------------------- |
+| 404     | 未知的 `/api/*` 路径或缺失的静态资源      |
+| 400     | JSON 无效或缺少 Prompt                    |
+| 403     | Origin 不在白名单                         |
+| 408/504 | 当前代理使用 504 表示上游超时             |
+| 413     | 请求体或 Prompt 超限                      |
+| 429     | 代理限流、并发已满或上游限流              |
+| 502     | 上游不可用、返回错误或响应过大            |
+| 503     | 站点 AI 未开启（v1 默认）或共享配额不可用 |
+| 405     | HTTP 方法不支持                           |
 
 ## 日志与监控
 

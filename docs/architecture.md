@@ -11,27 +11,30 @@ Browser
   │     └─ 口味地图 TasteMapView ──> features/taste/tasteModel（状态 + 明确感受）
   ├─ App/use archive actions ──> shared/storage/archiveStorage ──> localStorage
   ├─ SettingsPage / SQL import ──> schema + preview ──> App merge ──> localStorage
-  └─ AI feature ──> /api/deepseek/chat ──> server.mjs ──> DeepSeek
-                         └─ personal session config ──> user endpoint (direct)
+  └─ AI feature ──> GET /api/deepseek/status（v1：disabled，不上传 Prompt）
+                    ├─ 站点 AI（需 SITE_AI_ENABLED=true + DEEPSEEK_API_KEY）──> server.mjs ──> DeepSeek
+                    ├─ personal session config ──> user endpoint (direct)
+                    └─ ChatGPT 协作模式（用户自行复制粘贴）
 ```
 
 静态生产服务由 `server.mjs` 提供：HTML、带 hash 的 JS/CSS、`/data/` JSON 和图片采用不同缓存策略；未知的 extensionless path 回退到 `index.html`，缺失带扩展名资源返回 404。
 
 ## 状态所有权
 
-| 状态            | 所有者                                               | 说明                                                                                                    |
-| --------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| 当前 route      | `App.tsx` + `services/router.ts`                     | 四个目的地与查询参数的解析/格式化；`pushState`/`replaceState`/`popstate`，没有引入路由库。见下文。      |
-| 年鉴 ID/详情    | `App.tsx` + `shared/storage/archiveStorage`          | UI 状态使用 `Set`/`Map`，存储层负责兼容键、损坏隔离和写入。                                             |
-| 年鉴写入规则    | `features/archive/archiveOperations.ts`              | 新增条目、状态变更与历史时间、点评/日期编辑、导入合并与预览的纯函数；JSON 与 SQL 恢复共用同一合并实现。 |
-| 观看历史日期    | `shared/schemas/history.ts` + `shared/i18n/dates.ts` | 历史日期的校验、精度、比较与用户输入解析；显示时按语言格式化，存储保持 ISO。                            |
-| 存储 schema     | `shared/storage/archiveStorage.ts`                   | `anime-horizon-archive-schema` 记录版本（当前 4）；读取时确定性、幂等地迁移旧记录。                     |
-| 界面语言        | `shared/i18n/I18nProvider` + `locales.ts`            | 用户显式选择保存在 `anime-horizon-locale`；未选择时跟随浏览器语言，见 `docs/i18n.md`。                  |
-| AI 鉴赏档案缓存 | `App.tsx`（`analysisByLocale`）                      | 成功结果按输出语言分别缓存，切换语言不会复用另一种语言的档案；失败不缓存。                              |
-| 目录季度数据    | `GuidePage`                                          | 组件负责当前季 loading/abort；`App` 只保留最近当前视图数据给导出和其他 modal 使用。                     |
-| 目录缓存/请求   | `services/anilistService.ts`                         | TTL、容量、in-flight Promise 去重和 schema 校验集中在服务层。                                           |
-| AI session 配置 | `services/geminiService.ts` + `shared/schemas/ai.ts` | 只写入 `sessionStorage`，不进入默认代理请求。                                                           |
-| 备份迁移        | `features/backup/backupSchema.ts`                    | 版本校验、数量限制、领域 normalizer 和去重在确认写入前完成。                                            |
+| 状态            | 所有者                                                 | 说明                                                                                                    |
+| --------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| 当前 route      | `App.tsx` + `services/router.ts`                       | 四个目的地与查询参数的解析/格式化；`pushState`/`replaceState`/`popstate`，没有引入路由库。见下文。      |
+| 年鉴 ID/详情    | `App.tsx` + `shared/storage/archiveStorage`            | UI 状态使用 `Set`/`Map`，存储层负责兼容键、损坏隔离和写入。                                             |
+| 年鉴写入规则    | `features/archive/archiveOperations.ts`                | 新增条目、状态变更与历史时间、点评/日期编辑、导入合并与预览的纯函数；JSON 与 SQL 恢复共用同一合并实现。 |
+| 观看历史日期    | `shared/schemas/history.ts` + `shared/i18n/dates.ts`   | 历史日期的校验、精度、比较与用户输入解析；显示时按语言格式化，存储保持 ISO。                            |
+| 存储 schema     | `shared/storage/archiveStorage.ts`                     | `anime-horizon-archive-schema` 记录版本（当前 4）；读取时确定性、幂等地迁移旧记录。                     |
+| 存储完整性      | `App.tsx`（`integrityIssue`）+ `ArchiveRecoveryNotice` | 读取时有条目无法校验或数据无法解析时暂停保存，原始数据保留到用户下载或明确选择“只保留能读取的作品”。    |
+| 界面语言        | `shared/i18n/I18nProvider` + `locales.ts`              | 用户显式选择保存在 `anime-horizon-locale`；未选择时跟随浏览器语言，见 `docs/i18n.md`。                  |
+| AI 鉴赏档案缓存 | `App.tsx`（`analysisByLocale`）                        | 成功结果按输出语言分别缓存，切换语言不会复用另一种语言的档案；失败不缓存。                              |
+| 目录季度数据    | `GuidePage`                                            | 组件负责当前季 loading/abort；`App` 只保留最近当前视图数据给导出和其他 modal 使用。                     |
+| 目录缓存/请求   | `services/anilistService.ts`                           | TTL、容量、in-flight Promise 去重和 schema 校验集中在服务层。                                           |
+| AI session 配置 | `services/geminiService.ts` + `shared/schemas/ai.ts`   | 只写入 `sessionStorage`，不进入默认代理请求。                                                           |
+| 备份迁移        | `features/backup/backupSchema.ts`                      | 版本校验、数量限制、领域 normalizer 和去重在确认写入前完成。                                            |
 
 ## 路由与目的地
 

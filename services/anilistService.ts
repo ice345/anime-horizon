@@ -17,6 +17,16 @@ const DATA_MODE: DataMode =
   configuredDataMode === 'local' || configuredDataMode === 'local-strict' ? configuredDataMode : 'remote';
 const LOCAL_DATA_BASE = import.meta.env.VITE_LOCAL_DATA_BASE || '/data';
 
+/** Per-attempt AniList request timeout. A timeout is retried like a network failure, never "no results". */
+export const ANILIST_REQUEST_TIMEOUT_MS = 20_000;
+
+export class AniListTimeoutError extends Error {
+  constructor() {
+    super('AniList request timed out');
+    this.name = 'AniListTimeoutError';
+  }
+}
+
 const CONFIG = {
   RETRY_DELAY: 60_000,
   MAX_RETRIES: 3,
@@ -177,6 +187,38 @@ const delay = (ms: number, signal?: AbortSignal) =>
     else signal.addEventListener('abort', abort, { once: true });
   });
 
+/**
+ * One AniList request (including reading the body) bounded by ANILIST_REQUEST_TIMEOUT_MS. The
+ * caller's signal still cancels it; only our own timer turns into an AniListTimeoutError.
+ */
+const requestOnce = async (query: string, variables: GraphqlVariables, signal?: AbortSignal) => {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, ANILIST_REQUEST_TIMEOUT_MS);
+  const cancel = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ query, variables }),
+      signal: controller.signal,
+    });
+    const json: unknown = response.ok ? await response.json() : undefined;
+    return { response, json };
+  } catch (error) {
+    if (timedOut && !signal?.aborted) throw new AniListTimeoutError();
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
+  }
+};
+
 async function fetchWithRetry(
   variables: GraphqlVariables,
   retries = 0,
@@ -184,12 +226,7 @@ async function fetchWithRetry(
   signal?: AbortSignal
 ): Promise<unknown> {
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ query, variables }),
-      signal,
-    });
+    const { response, json } = await requestOnce(query, variables, signal);
 
     if (response.status === 429) {
       if (retries >= CONFIG.MAX_RETRIES) throw new Error('AniList rate limit exceeded');
@@ -204,7 +241,6 @@ async function fetchWithRetry(
       }
       throw new Error(`AniList API error: ${response.status}`);
     }
-    const json: unknown = await response.json();
     // Only the envelope is validated here; items are validated one by one by the readers.
     const parsed = anilistEnvelopeSchema.safeParse(json);
     if (!parsed.success) throw new NonRetryableAniListError('AniList response schema validation failed');

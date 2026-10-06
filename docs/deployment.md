@@ -4,20 +4,28 @@
 
 项目提供 `render.yaml`：
 
-- Runtime：Node
-- Build：`npm ci && npm run build`
-- Start：`npm run start`
-- Node：24
+- Runtime：Node 24
+- Build：`npm ci --include=dev && npm run build && npm prune --omit=dev`
+- Start：`npm run start`（`node server.mjs`，只依赖 Node 内置模块）
+- 环境变量：`NODE_ENV=production`、`CORS_ORIGINS`、`SITE_AI_ENABLED=false`
 
-必须配置：
+为什么构建命令要写 `--include=dev`：Render 的环境变量同时作用于构建阶段，而 `NODE_ENV=production` 会让 `npm ci` 跳过 devDependencies（Vite、Tailwind、TypeScript 都在其中），直接写 `npm ci && npm run build` 会构建失败。`--include=dev` 在构建时保留它们，构建后 `npm prune --omit=dev` 再移除，运行时不依赖开发工具。
 
-```env
-NODE_ENV=production
-DEEPSEEK_API_KEY=...
-CORS_ORIGINS=https://app.example.com
-```
+`NODE_ENV=production` 会启用：缺少 `Origin` 时拒绝 AI 请求、禁止 `CORS_ORIGINS=*`、HSTS、上游与配额服务必须是 HTTPS，以及生产启动警告。部署后用 `curl -sI https://<站点>/ | grep -i strict-transport-security` 确认已生效（只有生产模式才会返回 HSTS）。
 
-`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL` 和上游模型只在服务端读取。不要以 `VITE_` 前缀暴露服务端凭证。
+`CORS_ORIGINS` 必须填写站点自己的公开 origin（协议 + 域名 + 端口，不带路径），例如 `https://anime-horizon.onrender.com`；使用自定义域名时填自定义域名，同时保留 onrender.com 域名时用逗号分隔填写两者。浏览器对同源 POST 也会发送 `Origin`，所以同源部署也必须填写。
+
+### v1 的 AI 姿态：不提供共享站点 AI
+
+v1 不配置 `DEEPSEEK_API_KEY`，并显式设置 `SITE_AI_ENABLED=false`。代理只有在 `SITE_AI_ENABLED=true` **且**存在 `DEEPSEEK_API_KEY` 时才会调用上游；否则：
+
+- `GET /api/deepseek/status` 返回 `{"siteAI":"disabled"}`，不包含任何配置细节；
+- 前端在调用站点 AI 前先查询该状态，关闭时**不会上传 Prompt**，而是提示“本站不提供内置 AI”，并引导用户使用自己的 AI 服务（设置 → AI 与隐私）或 ChatGPT 协作模式；
+- 直接 `POST /api/deepseek/chat` 返回 `503 AI_NOT_CONFIGURED`：不读取请求体、不消耗配额、不调用上游。
+
+发现、我的番剧、观看历程、口味地图、为你推荐和看番回忆都不依赖 AI。
+
+以后如果要开启共享站点 AI，至少需要：服务端构建 Prompt 的任务接口（而不是转发任意 Prompt）、`AI_QUOTA_REDIS_URL` / `AI_QUOTA_REDIS_TOKEN` 共享持久配额（内存计数在实例重启或免费实例休眠后会清零）、较低的 `AI_GLOBAL_RATE_LIMIT_PER_DAY`、供应商侧的消费上限，然后再设置 `SITE_AI_ENABLED=true` 与 `DEEPSEEK_API_KEY`。
 
 ## Cloudflare Pages + Render API
 
@@ -31,7 +39,7 @@ CORS_ORIGINS=https://app.example.com
 
 ## AI 代理限制
 
-应用内默认限制：请求体 128 KB、Prompt 60,000 字符、上游响应 512 KB、45 秒超时、每 IP 每分钟 10 次、共享全局每分钟 100 次、共享全局每日 10,000 次、单实例并发 2。这样完整年鉴索引可以进入自动分析；Prompt 仍受固定上限保护。多实例生产环境配置 `AI_QUOTA_REDIS_URL` 与 `AI_QUOTA_REDIS_TOKEN`，使分钟/日配额跨实例共享；共享配额不可用时默认返回 503。未配置 Redis 时才回退到单实例内存窗口。
+以下限制只在启用站点 AI 时生效。应用内默认限制：请求体 128 KB、Prompt 60,000 字符、上游输出 4,000 tokens（`AI_MAX_OUTPUT_TOKENS`）、上游响应 512 KB、45 秒超时、每 IP 每分钟 10 次、共享全局每分钟 100 次、共享全局每日 10,000 次、单实例并发 2。这样完整年鉴索引可以进入自动分析；Prompt 仍受固定上限保护。多实例生产环境配置 `AI_QUOTA_REDIS_URL` 与 `AI_QUOTA_REDIS_TOKEN`，使分钟/日配额跨实例共享；共享配额不可用时默认返回 503。未配置 Redis 时才回退到单实例内存窗口。
 
 可复现的浏览器 E2E 运行时由 `npm run e2e:install` 安装 Playwright Chromium 与 headless shell；CI 在 `npm run test:e2e` 前使用同一浏览器列表并额外安装 Linux 系统依赖。
 
@@ -46,6 +54,8 @@ CORS_ORIGINS=https://app.example.com
 - 两者都未配置时保持默认（对端地址）：安全，但在代理后面会更严格。
 
 ### 必须在 Render 生产环境验证的事项
+
+**v1 不需要做这一步**：站点 AI 关闭时，`/api/deepseek/chat` 在消耗配额之前就返回 503，每 IP 限流不参与任何请求，因此客户端 IP 的取值不会影响 v1。以后准备开启站点 AI 时，先临时设置 `SITE_AI_ENABLED=true` 和 `DEEPSEEK_API_KEY`，再按下面的步骤验证（空 JSON 在调用上游前就返回 400，不产生费用），验证完成前不要公开开启。
 
 Render 没有关于客户端 IP 转发头的正式文档，公开信息互相矛盾：Render 功能请求页中的用户描述称 Render 只在客户端提供的 `X-Forwarded-For` 后追加；Render 员工在同一页面答复称会把列表第一个 IP 设为真实客户端 IP（2021 年）；社区帖子还提到 Render 前面的 Cloudflare 会添加 `CF-Connecting-IP` / `True-Client-IP`。因此 `render.yaml` 不预设任何值，部署后必须按以下步骤验证。
 
@@ -83,8 +93,10 @@ npm run start
 
 发布前确认：
 
+- `NODE_ENV=production` 已生效（站点返回 HSTS 头）。
 - `CORS_ORIGINS` 不是 `*`，并包含站点自己的 origin（同源部署也需要）。
-- 已完成上文“必须在 Render 生产环境验证的事项”，并记录了 `TRUST_PROXY` / `CLIENT_IP_HEADER` 的取值。
+- `SITE_AI_ENABLED` 为 `false`（或未设置），`GET /api/deepseek/status` 返回 `{"siteAI":"disabled"}`。
+- 只有在开启站点 AI 时：已完成上文“必须在 Render 生产环境验证的事项”，并记录了 `TRUST_PROXY` / `CLIENT_IP_HEADER` 的取值。
 - 日志没有 Key、Authorization、完整 Prompt 或年鉴内容。
 - `/api/deepseek/chat` 的 4xx/5xx 和超时错误已通过 smoke test。
 - `dist/index.html` 可访问，带扩展名的缺失资源返回 404，`/archive` 能回退到 SPA 入口。

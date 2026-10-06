@@ -186,6 +186,8 @@ test.describe('AI report language', () => {
     await mockAniList(page);
     await seedArchive(page, [entry(1, 'note')]);
     const prompts: string[] = [];
+    // These tests exercise a deployment that has explicitly enabled the site AI.
+    await page.route('**/api/deepseek/status', (route) => route.fulfill({ json: { siteAI: 'enabled' } }));
     await page.route('**/api/deepseek/chat', async (route) => {
       const prompt: string = route.request().postDataJSON().prompt;
       prompts.push(prompt);

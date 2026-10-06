@@ -30,3 +30,6 @@ playwright-report
 public
 data
 explain.md
+
+# Local editor/agent configuration
+.omp/

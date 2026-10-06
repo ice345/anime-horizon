@@ -64,8 +64,11 @@ export const FeaturedSection: React.FC<FeaturedSectionProps> = ({
             <button
               type="button"
               key={item.id}
-              onClick={() => onToggle(item)}
-              aria-pressed={selected}
+              // Add-only: a saved title is shown as added, and clicking it never removes it.
+              onClick={() => {
+                if (!selected) onToggle(item);
+              }}
+              aria-disabled={selected || undefined}
               className="group grid min-h-36 grid-cols-[72px_1fr] gap-3 rounded-[var(--ah-radius-md)] border border-transparent bg-yearbook-blue/70 p-3 text-left transition hover:-translate-y-0.5 hover:border-sky-200 hover:bg-yearbook-surface hover:shadow-sm"
             >
               <div className="relative aspect-[3/4] w-[72px] overflow-hidden rounded-[var(--ah-radius-sm)] bg-slate-100">

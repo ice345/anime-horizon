@@ -174,7 +174,8 @@ export const planArchiveMerge = (currentIds: Iterable<string>, incoming: Anime[]
  *   documented restore semantics). Its reaction replaces the current one only when it is known: an
  *   import without a reaction (for example an older backup) never erases a reaction given locally.
  * - History is merged field by field with `mergeUserHistory`, so known dates are never lost.
- * - Duplicate IDs inside the import collapse into a single record (last one wins, history merged).
+ * - Duplicate IDs inside `incoming` collapse into a single record (later ones win, history merged). JSON
+ *   backups are already de-duplicated before this point, keeping the first copy (`normalizeEntries`).
  * - The input map is never mutated, so callers can apply the result atomically.
  */
 export const mergeArchiveEntries = (current: Map<string, Anime>, incoming: Anime[]): Map<string, Anime> => {

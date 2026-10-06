@@ -22,7 +22,7 @@ It supports a **remote live mode** (requesting the AniList API directly) and a *
 ## 📋 Prerequisites
 
 - **Node.js**: 24.x LTS (a compatible newer LTS also works locally)
-- **API Key**: the default Render mode uses a DeepSeek key; visitors may also enter a key for any compatible model, scoped to the current session.
+- **API Key**: not required. The core product works without AI. For AI reflections, visitors enter their own key (DeepSeek or any OpenAI-compatible service) for the current browser session, or use the ChatGPT copy/paste bridge. The public v1 deployment runs no shared site AI.
 
 ## 🚀 Quick Start
 
@@ -32,21 +32,10 @@ It supports a **remote live mode** (requesting the AniList API directly) and a *
     npm ci
     ```
 
-2.  **Configure environment variables**
-    Copy `.env.local.example` to `.env.local`. Both production deployments and the default local server configure `DEEPSEEK_API_KEY` server-side only; do not use `VITE_DEEPSEEK_API_KEY`, because `VITE_` variables are bundled into the browser payload:
+2.  **Configure environment variables (optional)**
+    Copy `.env.local.example` to `.env.local` if you need any server setting. The shared site AI is **off by default**: the server only calls an AI provider when `SITE_AI_ENABLED=true` and `DEEPSEEK_API_KEY` are both set, and the v1 public deployment sets neither. Never put a server-side key in a `VITE_` variable, because `VITE_` variables are bundled into the browser payload.
 
-    ```env
-    # Never define any server-side API key as a VITE_ variable; VITE_ variables are bundled into the browser payload.
-    # Use the per-session personal key in the site, or Render's server-side DEEPSEEK_API_KEY.
-    ```
-
-    When deploying to a Render Web Service, configure it under Environment:
-
-    ```env
-    DEEPSEEK_API_KEY=your_deepseek_api_key_here
-    ```
-
-    `server.mjs` reads this key on the server and proxies AI requests through `/api/deepseek/chat`, keeping the key out of the browser bundle.
+    For production on Render, see the [Render Deployment](#-render-deployment) section below and [docs/deployment.md](docs/deployment.md).
 
     If Cloudflare only provides a CNAME to the Render Web Service, no extra frontend configuration is needed. If Cloudflare uses Pages/static hosting, configure the following in Cloudflare's build environment variables:
 
@@ -54,7 +43,7 @@ It supports a **remote live mode** (requesting the AniList API directly) and a *
     VITE_DEEPSEEK_PROXY_URL=https://your-render-service.onrender.com/api/deepseek/chat
     ```
 
-    Also set `CORS_ORIGIN=https://your-pages-domain.pages.dev` on Render. For a custom domain, replace it with the actual frontend domain.
+    Also set `CORS_ORIGINS=https://your-pages-domain.pages.dev` on Render. For a custom domain, replace it with the actual frontend domain.
 
 3.  **Prepare data (recommended)**
     On first run, pull local data first so you can use local mode or offline preview:
@@ -79,13 +68,15 @@ It supports a **remote live mode** (requesting the AniList API directly) and a *
 
 The app selects its data source through the `VITE_DATA_MODE` environment variable; the corresponding commands are built into `package.json`.
 
-| Mode             | Command                                   | Data source                            | Use case                                                                                      |
-| :--------------- | :---------------------------------------- | :------------------------------------- | :-------------------------------------------------------------------------------------------- |
-| **Remote**       | `npm run dev:remote`                      | **AniList API** (live requests)        | Developing/debugging API interaction, fetching the latest live data. Requires network access. |
-| **Local**        | `npm run dev:local`                       | **`public/data/`** (local JSON/images) | Offline development, UI debugging, avoiding API rate limits. Run the sync script first.       |
-| **Strict local** | `VITE_DATA_MODE=local-strict npm run dev` | **`public/data/`**                     | Fails immediately when local data is missing instead of falling back to AniList.              |
+| Mode             | Command                                   | Data source                            | Use case                                                                                                                                           |
+| :--------------- | :---------------------------------------- | :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Remote**       | `npm run dev:remote`                      | **AniList API** (live requests)        | Developing/debugging API interaction, fetching the latest live data. Requires network access.                                                      |
+| **Local**        | `npm run dev:local`                       | **`public/data/`** (local JSON/images) | Offline development, UI debugging, avoiding API rate limits. Run the sync script first. A developer convenience, not a full catalogue (see below). |
+| **Strict local** | `VITE_DATA_MODE=local-strict npm run dev` | **`public/data/`**                     | Fails immediately when local data is missing instead of falling back to AniList.                                                                   |
 
 > **Tip**: before running local mode, make sure the data sync script has generated the JSON and image files.
+>
+> **Local mode is a developer/offline convenience, not parity with live mode.** The sync script fetches one page per season (`--limit`, at most 50 of the most popular titles), so less popular titles are missing, and it stores fewer fields (no airing status, episodes or studios). The deployed site uses live AniList data.
 
 Run the full quality gate before committing:
 
@@ -97,27 +88,31 @@ npm run check
 
 ## 🌐 Render Deployment
 
-If you have already connected the GitHub repository to Render, use a **Web Service**, not a Static Site. That way `DEEPSEEK_API_KEY` stays server-side and is never exposed to the browser.
+If you have already connected the GitHub repository to Render, use a **Web Service**, not a Static Site.
 
-| Item          | Value                                |
-| :------------ | :----------------------------------- |
-| Service Type  | `Web Service`                        |
-| Build Command | `npm ci && npm run build`            |
-| Start Command | `npm run start`                      |
-| Environment   | `DEEPSEEK_API_KEY=your DeepSeek key` |
+| Item          | Value                                                                                  |
+| :------------ | :------------------------------------------------------------------------------------- |
+| Service Type  | `Web Service`                                                                          |
+| Build Command | `npm ci --include=dev && npm run build && npm prune --omit=dev`                        |
+| Start Command | `npm run start`                                                                        |
+| Environment   | `NODE_ENV=production`, `CORS_ORIGINS=<the site's own origin>`, `SITE_AI_ENABLED=false` |
 
-The repository already provides `render.yaml`. If Render detects the Blueprint, you can create the service directly from it; otherwise configure it manually as in the table above. After changing `DEEPSEEK_API_KEY`, choose `Save, rebuild, and deploy` or manually trigger a new deployment.
+The repository already provides `render.yaml` with these values. If Render detects the Blueprint, you can create the service directly from it; otherwise configure it manually as in the table above.
+
+- `NODE_ENV=production` turns on the production protections (Origin checks, HSTS). Because Render also applies it during the build, the build command needs `--include=dev`, or npm skips Vite/Tailwind/TypeScript and the build fails; `npm prune --omit=dev` removes them again afterwards.
+- `CORS_ORIGINS` must contain the site's own public origin, e.g. `https://anime-horizon.onrender.com` (comma-separate several).
+- v1 runs **no shared site AI** and needs no `DEEPSEEK_API_KEY`. See [docs/deployment.md](docs/deployment.md) for what enabling it later would require.
 
 ## Personal Models and Privacy
 
-By default, the AI reflections (taste report) run through Render's server-side `DEEPSEEK_API_KEY` and **does not require filling in "AI & Privacy" first**. Only after clicking "Enable personal configuration" in "AI & Privacy" does the current session bypass Render and call a personal endpoint directly; clicking "Restore site default service" switches back to Render.
+AI reflections (the taste report) are optional and experimental. The public v1 deployment runs **no shared site AI**: without a personal configuration, "Generate taste report" explains that the built-in AI isn't enabled and offers the two ways that do work, and it uploads nothing. Before generating, the Taste Map shows exactly what a report sends: titles with their public AniList details, your status and reaction, notes for highlighted titles, and Taste Map counts (no dates).
 
 Users can also enter their own key for the **current browser session** under "Settings → AI & privacy" in the site, and choose:
 
 - `DeepSeek`: automatically fills in DeepSeek's endpoint and default model.
 - `OpenAI-compatible service`: enter the provider's Chat Completions endpoint and model name, such as a self-hosted gateway or another compatible service.
 
-Personal configuration is stored only in the browser's `sessionStorage`, expires when the current session closes, is never submitted to Render, and is never written to a database. Browser-direct connections to compatible services require that the service allows CORS requests from this site; otherwise keep using Render's default server-side key.
+Personal configuration is stored only in the browser's `sessionStorage`, expires when the current session closes, is never submitted to this site's server, and is never written to a database. Requests go straight from your browser to that provider, so it must allow CORS requests from this site; otherwise use the ChatGPT bridge below.
 
 ### ChatGPT Collaboration Mode
 
@@ -218,6 +213,10 @@ The sync script stores assets separately under a backup directory and the fronte
 ---
 
 ## ⚠️ Caveats and Known Limitations
+
+### License
+
+The repository has no license yet. Until the maintainer chooses one, please don't reuse the code or send contributions that assume a particular license.
 
 ### 1. Offline Rendering Limits
 

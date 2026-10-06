@@ -22,7 +22,7 @@
 ## 📋 前置要求
 
 - **Node.js**: 24.x LTS（本地也可使用兼容的较新 LTS）
-- **API Key**: Render 默认模式使用 DeepSeek Key；也可由访客在当前会话自行填写兼容模型的 Key。
+- **API Key**：不是必需的，核心功能不依赖 AI。如需 AI 回顾，访客可以为当前浏览器会话填写自己的 Key（DeepSeek 或任意 OpenAI 兼容服务），或使用 ChatGPT 复制/粘贴协作。公开的 v1 部署不提供共享站点 AI。
 
 ## 🚀 快速开始
 
@@ -32,21 +32,10 @@
     npm ci
     ```
 
-2.  **配置环境变量**
-    复制 `.env.local.example` 为 `.env.local`。正式发布与本地默认服务均只在服务端配置 `DEEPSEEK_API_KEY`；不要使用 `VITE_DEEPSEEK_API_KEY`，因为 `VITE_` 变量会进入浏览器包：
+2.  **配置环境变量（可选）**
+    如需服务端设置，复制 `.env.local.example` 为 `.env.local`。共享站点 AI **默认关闭**：只有同时设置 `SITE_AI_ENABLED=true` 和 `DEEPSEEK_API_KEY` 时服务端才会调用 AI 供应商，v1 公开部署两者都不设置。不要把任何服务端 Key 写成 `VITE_` 变量，因为 `VITE_` 变量会进入浏览器包。
 
-    ```env
-    # 不要把任何服务端 API Key 写成 VITE_ 变量；VITE_ 变量会进入浏览器包。
-    # 请使用网站里的当前会话个人 Key，或 Render 的服务端 DEEPSEEK_API_KEY。
-    ```
-
-    部署到 Render Web Service 时，在 Environment 中配置：
-
-    ```env
-    DEEPSEEK_API_KEY=your_deepseek_api_key_here
-    ```
-
-    `server.mjs` 会在服务端读取这个 key，并通过 `/api/deepseek/chat` 代理 AI 请求，避免把 key 打进浏览器包。
+    在 Render 上部署时，请看下方的 [Render 部署](#-render-部署) 和 [docs/deployment.md](docs/deployment.md)。
 
     如果 Cloudflare 只是给 Render Web Service 做 CNAME，前端无需额外配置；如果 Cloudflare 使用的是 Pages/静态托管，则在 Cloudflare 的构建环境变量中配置：
 
@@ -54,7 +43,7 @@
     VITE_DEEPSEEK_PROXY_URL=https://你的-render-服务.onrender.com/api/deepseek/chat
     ```
 
-    同时在 Render 中配置 `CORS_ORIGIN=https://你的-pages-域名.pages.dev`。自定义域名场景把它替换为实际前端域名即可。
+    同时在 Render 中配置 `CORS_ORIGINS=https://你的-pages-域名.pages.dev`。自定义域名场景把它替换为实际前端域名即可。
 
 3.  **准备数据（推荐）**
     首次运行建议先拉取本地数据，以便使用本地模式或离线预览：
@@ -79,13 +68,15 @@
 
 本项目通过环境变量 `VITE_DATA_MODE` 区分数据源，`package.json` 中已内置相关命令。
 
-| 模式                  | 命令                                      | 数据源                              | 适用场景                                                     |
-| :-------------------- | :---------------------------------------- | :---------------------------------- | :----------------------------------------------------------- |
-| **远程模式 (Remote)** | `npm run dev:remote`                      | **Anilist API** (实时请求)          | 开发调试 API 交互、获取最新实时数据。需联网。                |
-| **本地模式 (Local)**  | `npm run dev:local`                       | **`public/data/`** (本地 JSON/图片) | 离线开发、UI 调试、避免触发 API 频率限制。需先运行同步脚本。 |
-| **严格本地 (Strict)** | `VITE_DATA_MODE=local-strict npm run dev` | **`public/data/`**                  | 缺少本地数据时直接报错，不回退到 AniList。                   |
+| 模式                  | 命令                                      | 数据源                              | 适用场景                                                                                         |
+| :-------------------- | :---------------------------------------- | :---------------------------------- | :----------------------------------------------------------------------------------------------- |
+| **远程模式 (Remote)** | `npm run dev:remote`                      | **Anilist API** (实时请求)          | 开发调试 API 交互、获取最新实时数据。需联网。                                                    |
+| **本地模式 (Local)**  | `npm run dev:local`                       | **`public/data/`** (本地 JSON/图片) | 离线开发、UI 调试、避免触发 API 频率限制。需先运行同步脚本。仅为开发便利，不是完整目录（见下）。 |
+| **严格本地 (Strict)** | `VITE_DATA_MODE=local-strict npm run dev` | **`public/data/`**                  | 缺少本地数据时直接报错，不回退到 AniList。                                                       |
 
 > **提示**：在运行本地模式前，请确保已执行数据同步脚本生成了 JSON 和图片文件。
+>
+> **本地模式只是开发/离线便利，与实时模式并不等价。** 同步脚本每个季度只拉取一页（`--limit`，最多 50 部最热门的作品），较冷门的作品会缺失，保存的字段也更少（没有播出状态、集数和制作公司）。部署的网站使用实时 AniList 数据。
 
 提交前运行完整质量门禁：
 
@@ -97,27 +88,31 @@ npm run check
 
 ## 🌐 Render 部署
 
-如果你已经把 GitHub 仓库绑定到 Render，推荐用 **Web Service**，不要用 Static Site。这样 `DEEPSEEK_API_KEY` 留在服务端，不会暴露到浏览器。
+如果你已经把 GitHub 仓库绑定到 Render，推荐用 **Web Service**，不要用 Static Site。
 
-| 项目          | 值                                   |
-| :------------ | :----------------------------------- |
-| Service Type  | `Web Service`                        |
-| Build Command | `npm ci && npm run build`            |
-| Start Command | `npm run start`                      |
-| Environment   | `DEEPSEEK_API_KEY=你的 DeepSeek Key` |
+| 项目          | 值                                                                                 |
+| :------------ | :--------------------------------------------------------------------------------- |
+| Service Type  | `Web Service`                                                                      |
+| Build Command | `npm ci --include=dev && npm run build && npm prune --omit=dev`                    |
+| Start Command | `npm run start`                                                                    |
+| Environment   | `NODE_ENV=production`、`CORS_ORIGINS=<站点自己的 origin>`、`SITE_AI_ENABLED=false` |
 
-仓库里已经提供 `render.yaml`。如果 Render 检测到 Blueprint，可以直接用它创建服务；否则手动按上表配置即可。改了 `DEEPSEEK_API_KEY` 后，选择 `Save, rebuild, and deploy` 或手动触发一次新部署。
+仓库里已经提供带这些值的 `render.yaml`。如果 Render 检测到 Blueprint，可以直接用它创建服务；否则手动按上表配置即可。
+
+- `NODE_ENV=production` 会开启生产环境保护（Origin 检查、HSTS）。Render 在构建阶段也会应用它，所以构建命令需要 `--include=dev`，否则 npm 会跳过 Vite/Tailwind/TypeScript 导致构建失败；构建后 `npm prune --omit=dev` 再把它们移除。
+- `CORS_ORIGINS` 必须包含站点自己的公开 origin，例如 `https://anime-horizon.onrender.com`（多个用逗号分隔）。
+- v1 **不提供共享站点 AI**，不需要 `DEEPSEEK_API_KEY`。以后如需开启，所需条件见 [docs/deployment.md](docs/deployment.md)。
 
 ## 个人模型与隐私
 
-默认情况下，AI 回顾（鉴赏档案）经由 Render 服务端的 `DEEPSEEK_API_KEY` 完成，**不需要先填写“AI 与隐私”**。只有在“AI 与隐私”中点击“启用个人配置”后，当前会话才会绕过 Render，直接请求个人 endpoint；点击“恢复站点默认服务”即可切回 Render。
+AI 回顾（鉴赏档案）是可选的实验性功能。公开的 v1 部署**不提供共享站点 AI**：没有个人配置时，“生成鉴赏档案”会说明本站未启用内置 AI，并引导你使用下面两种可用方式，不会上传任何内容。生成前，口味地图会写明会发送哪些内容：作品名及其 AniList 公开信息、你的观看状态和感受、重点作品的短评，以及口味地图的统计（不含日期）。
 
 用户也可以在网站的“设置 → AI 与隐私”中，为**当前浏览器会话**填写自己的 Key，并选择：
 
 - `DeepSeek`：自动填入 DeepSeek 的接口地址与默认模型。
 - `OpenAI 兼容服务`：填写服务商提供的 Chat Completions 地址和模型名，例如自建网关或其他兼容服务。
 
-个人配置仅保存在浏览器的 `sessionStorage`，关闭当前会话后即失效，不会提交到 Render，也不会写入数据库。浏览器直连的兼容服务需要允许该站点的 CORS 请求；否则请继续使用 Render 的默认服务端 Key。
+个人配置仅保存在浏览器的 `sessionStorage`，关闭当前会话后即失效，不会提交到本站服务器，也不会写入数据库。请求由浏览器直接发往该服务，因此服务需要允许本站的 CORS 请求；否则请使用下面的 ChatGPT 协作模式。
 
 ### ChatGPT 协作模式
 
@@ -218,6 +213,10 @@ npm run data:sync -- --years 2024,2025 --limit 50
 ---
 
 ## ⚠️ 注意事项与已知限制
+
+### 许可证
+
+仓库目前还没有许可证。在维护者选定之前，请不要复用代码，也不要提交以特定许可证为前提的贡献。
 
 ### 1. 离线渲染限制
 

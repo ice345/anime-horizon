@@ -17,6 +17,7 @@ export const DEFAULT_DEEPSEEK_ENDPOINT = 'https://api.deepseek.com/chat/completi
 const TIMEOUT_MS = 45_000;
 const env = import.meta.env;
 const DEEPSEEK_PROXY_URL = env.VITE_DEEPSEEK_PROXY_URL || '/api/deepseek/chat';
+const DEEPSEEK_STATUS_URL = DEEPSEEK_PROXY_URL.replace(/\/chat\/?$/, '/status');
 const SESSION_AI_CONFIG_KEY = 'anime-horizon-session-ai-config';
 const LEGACY_SESSION_DEEPSEEK_KEY = 'anime-horizon-session-deepseek-key';
 
@@ -59,7 +60,12 @@ export type AIErrorMessageKey =
   | 'aiError.rateLimited'
   | 'aiError.timeout'
   | 'aiError.personalUnreachable'
-  | 'aiError.siteUnavailable';
+  | 'aiError.siteUnavailable'
+  | 'aiError.tooLarge';
+
+/** Errors that retrying cannot fix: the UI offers alternatives instead of a retry button. */
+export const isPermanentAIError = (description: AIErrorDescription | null) =>
+  description?.key === 'aiError.notConfigured' || description?.key === 'aiError.tooLarge';
 
 /** Language-neutral description of an AI failure; the UI translates it with `formatAIError`. */
 export interface AIErrorDescription {
@@ -74,6 +80,9 @@ export const describeAIError = (error: unknown, source: AIRequestSource): AIErro
   const describe = (key: AIErrorMessageKey): AIErrorDescription => ({ key, source });
 
   if (code === 'AI_NOT_CONFIGURED') return describe('aiError.notConfigured');
+  // The request exceeds a size limit: retrying the same archive can never succeed.
+  if (code === 'PROMPT_TOO_LARGE' || code === 'REQUEST_TOO_LARGE' || status === 413)
+    return describe('aiError.tooLarge');
   if (code === 'CORS_FORBIDDEN' || code === 'ORIGIN_REQUIRED') return describe('aiError.originRejected');
   if (code === 'AI_EMPTY_RESULT') return describe('aiError.emptyResult');
   if (code === 'RATE_LIMITED' || code === 'AI_QUOTA_EXCEEDED' || code === 'CONCURRENCY_LIMITED')
@@ -311,6 +320,33 @@ const callSessionAI = async (prompt: string, config: SessionAIConfig) => {
   }
 };
 
+let siteAIStatus: boolean | undefined;
+
+/**
+ * Whether this deployment runs the shared site AI (`GET /api/deepseek/status`). A definite answer is
+ * cached for the session; a missing endpoint or a non-JSON reply (e.g. static hosting) means disabled.
+ * A network failure is not cached and surfaces as a temporary error.
+ */
+export const isSiteAIEnabled = async () => {
+  if (siteAIStatus !== undefined) return siteAIStatus;
+  const res = await fetch(DEEPSEEK_STATUS_URL, { headers: { Accept: 'application/json' } });
+  let enabled = false;
+  if (res.ok) {
+    try {
+      enabled = ((await res.json()) as { siteAI?: unknown })?.siteAI === 'enabled';
+    } catch {
+      enabled = false;
+    }
+  }
+  siteAIStatus = enabled;
+  return enabled;
+};
+
+/** Test helper: forget the cached site AI status. */
+export const resetSiteAIStatus = () => {
+  siteAIStatus = undefined;
+};
+
 const callDeepSeekRaw = async (prompt: string) => {
   const sessionConfig = getSessionAIConfig();
   if (sessionConfig) {
@@ -319,6 +355,10 @@ const callDeepSeekRaw = async (prompt: string) => {
   }
 
   const callServerProxy = async () => {
+    // Never upload the archive to a site AI that is switched off (the v1 default).
+    if (!(await isSiteAIEnabled())) {
+      throw new AIRequestError('Site AI is not enabled', { source: 'site', code: 'AI_NOT_CONFIGURED' });
+    }
     const res = await fetch(DEEPSEEK_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

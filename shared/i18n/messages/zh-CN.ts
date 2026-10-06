@@ -162,7 +162,7 @@ export const zhCN: Messages = {
   },
   card: {
     add: '加入年鉴：{title}',
-    remove: '从年鉴移除：{title}',
+    inMyAnime: '已在我的番剧',
     statusAria: '{title} 的观看状态',
     reactionAria: '{title} 的喜欢程度',
     noteAria: '{title} 的短评',
@@ -227,6 +227,20 @@ export const zhCN: Messages = {
     result: '{count} 题中记得 {score} 题。',
     again: '再来一次',
     noImpact: '看番回忆只是测测记忆。答案不会保存，也不会影响其他任何内容。',
+  },
+  recovery: {
+    title: '部分已保存的数据无法读取',
+    dropped: {
+      other:
+        '有 {count} 部已保存的作品无法读取，目前显示 {readable} 部。没有删除任何内容：原始数据仍保存在这个浏览器中。',
+    },
+    unreadable: '无法读取已保存的列表。没有删除任何内容：原始数据仍保存在这个浏览器中。',
+    paused: '在你做出选择之前，现在的修改不会被保存。如果之后可能需要，请先下载原始数据。',
+    download: '下载原始数据',
+    keepReadable: '只保留能读取的作品',
+    confirmKeep: {
+      other: '要用能读取的 {count} 部作品替换已保存的数据吗？无法读取的数据将从这个浏览器中删除。',
+    },
   },
   tasteMap: {
     viewsLabel: '观看历程视图',
@@ -321,6 +335,8 @@ export const zhCN: Messages = {
     reflections: {
       title: 'AI 回顾（实验性）',
       note: 'AI 会根据上面的证据写一份报告，可能会误读；请以你自己的感受为准。',
+      dataNote:
+        '生成鉴赏档案时会发送“我的番剧”中最多 512 部作品的：作品名、AniList 公开信息（播出年份、形式、题材、评分）、你的观看状态和感受、重点作品的短评，以及口味地图的统计。不会发送日期。使用个人 AI 服务（设置 → AI 与隐私）时，内容由浏览器直接发给该服务；使用 ChatGPT 时由你自己复制粘贴。',
       report: '生成鉴赏档案',
       portrait: '全站画像',
     },
@@ -401,7 +417,6 @@ export const zhCN: Messages = {
     empty: '输入标题后，可以跨年份检索并手动收录到你的动画年鉴。',
     error: '搜索暂时无法完成，请稍后重试。',
     add: '收录到年鉴',
-    remove: '移出年鉴',
   },
   portrait: {
     eyebrow: 'Portrait',
@@ -428,6 +443,8 @@ export const zhCN: Messages = {
     statusLine: '已看完 {completed} · 在看 {watching} · 想看 {plan}',
     close: '关闭鉴赏档案',
     loading: '正在整理鉴赏档案...',
+    notEnabledTitle: '未启用内置 AI',
+    useOwnAI: '使用自己的 AI 服务',
     errorTitle: '这次没有生成鉴赏档案',
     previousKept: '下方保留的是上一次成功生成的档案。',
     chatgptHint: '也可以展开下方的 ChatGPT 协作，自行生成后粘贴结果。',
@@ -444,6 +461,7 @@ export const zhCN: Messages = {
       copyFailed: '复制失败，请手动复制',
       imported: 'ChatGPT 档案已导入',
       invalid: '无法识别 JSON，请确认粘贴的是完整回答',
+      dataNote: '复制的 Prompt 包含同样的内容，只有在你粘贴到 ChatGPT 时才会离开你的设备。',
     },
     section: {
       review: '点评',
@@ -589,7 +607,8 @@ export const zhCN: Messages = {
   aiError: {
     sourceSite: '站点默认 AI',
     sourcePersonal: '个人模型',
-    notConfigured: '站点 AI 服务暂未开放。可以稍后再试，或使用 ChatGPT 协作生成档案。',
+    notConfigured:
+      '本站不提供内置 AI 服务。如需生成鉴赏档案，请在“设置 → AI 与隐私”中配置自己的 AI 服务，或使用下方的 ChatGPT。',
     originRejected: '站点 AI 服务拒绝了当前网页的请求来源，请稍后再试，或使用 ChatGPT 协作生成档案。',
     emptyResult: '{source}返回了空白结果，没有可展示的鉴赏内容。请重试。',
     busy: '站点 AI 当前请求较多，请稍等一会儿再重试。',
@@ -601,6 +620,8 @@ export const zhCN: Messages = {
     personalUnreachable:
       '个人模型无法连接。若 Key 和余额正常，通常是接口不允许浏览器跨域请求或地址填写错误；也可以恢复站点默认服务。',
     siteUnavailable: '站点 AI 暂时不可用，请稍后重试，或使用 ChatGPT 协作生成档案。',
+    tooLarge:
+      '你的番剧列表太大，超出了这次 AI 请求的上限，重试也不会成功。可以把 Prompt 复制到下方的 ChatGPT（过长时那里也可能无法处理），或使用支持更长请求的个人 AI 服务。',
   },
   myAnime: {
     eyebrow: 'My Anime',

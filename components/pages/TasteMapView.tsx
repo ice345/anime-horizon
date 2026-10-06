@@ -338,6 +338,7 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
           {t('tasteMap.reflections.title')}
         </h3>
         <p className="mt-1 max-w-2xl text-xs leading-5 text-yearbook-muted">{t('tasteMap.reflections.note')}</p>
+        <p className="mt-1 max-w-2xl text-xs leading-5 text-yearbook-muted">{t('tasteMap.reflections.dataNote')}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" onClick={onAnalyze} className={actionClass}>
             {t('tasteMap.reflections.report')}

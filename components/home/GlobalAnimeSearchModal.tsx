@@ -140,13 +140,17 @@ export const GlobalAnimeSearchModal: React.FC<GlobalAnimeSearchModalProps> = ({
                     <p className="mt-1 truncate text-[11px] text-yearbook-muted">
                       {anime.genres.slice(0, 2).join(' · ')}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => onToggle(anime)}
-                      className={`mt-3 text-sm font-medium transition ${selected ? 'text-yearbook-rose' : 'text-yearbook-sky hover:text-yearbook-ink'}`}
-                    >
-                      {selected ? t('search.remove') : t('search.add')}
-                    </button>
+                    {selected ? (
+                      <p className="mt-3 text-sm font-medium text-yearbook-rose">{t('card.inMyAnime')}</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onToggle(anime)}
+                        className="mt-3 min-h-11 text-sm font-medium text-yearbook-sky transition hover:text-yearbook-ink"
+                      >
+                        {t('search.add')}
+                      </button>
+                    )}
                   </div>
                 </article>
               );

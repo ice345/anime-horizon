@@ -1,7 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Anime } from '../types';
 import { copyBridgePrompt, openChatGPT } from '../services/chatgptBridge';
-import { AIErrorDescription, formatAIError, isPlaceholderText, TasteAnalysisResult } from '../services/geminiService';
+import {
+  AIErrorDescription,
+  formatAIError,
+  isPermanentAIError,
+  isPlaceholderText,
+  TasteAnalysisResult,
+} from '../services/geminiService';
 import { useI18n } from '../shared/i18n/useI18n';
 import { LOCALE_NATIVE_NAMES } from '../shared/i18n/locales';
 import { useModalA11y } from '../hooks/useModalA11y';
@@ -22,6 +28,8 @@ interface AnalysisModalProps {
   onImportChatGPT: (source: string) => boolean;
   /** Discovery belongs to the deterministic For You recommendations, not to the AI report. */
   onOpenRecommendations: () => void;
+  /** Opens Settings → AI & privacy to connect a personal AI service. */
+  onOpenAISettings: () => void;
 }
 
 export const AnalysisModal: React.FC<AnalysisModalProps> = ({
@@ -37,9 +45,14 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
   chatGptPrompt,
   onImportChatGPT,
   onOpenRecommendations,
+  onOpenAISettings,
 }) => {
   const { t, locale } = useI18n();
-  const [isChatGptOpen, setIsChatGptOpen] = useState(false);
+  const [chatGptToggled, setIsChatGptOpen] = useState<boolean | null>(null);
+  const notEnabled = error?.key === 'aiError.notConfigured';
+  const permanent = isPermanentAIError(error);
+  // When retrying can't help, open the ChatGPT alternative by default.
+  const isChatGptOpen = chatGptToggled ?? permanent;
   const [chatGptResult, setChatGptResult] = useState('');
   const [bridgeMessage, setBridgeMessage] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -139,20 +152,36 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
           ) : (
             <>
               {error && (
-                <section role="alert" className="border border-rose-200 bg-rose-50/80 p-4">
-                  <h3 className="text-sm font-bold text-rose-800">{t('analysis.errorTitle')}</h3>
+                <section
+                  role={notEnabled ? 'status' : 'alert'}
+                  className={
+                    notEnabled ? 'border border-sky-200 bg-sky-50/80 p-4' : 'border border-rose-200 bg-rose-50/80 p-4'
+                  }
+                >
+                  <h3 className={`text-sm font-bold ${notEnabled ? 'text-sky-800' : 'text-rose-800'}`}>
+                    {notEnabled ? t('analysis.notEnabledTitle') : t('analysis.errorTitle')}
+                  </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-700">{formatAIError(error, t)}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={onRetry}
-                      className="bg-sky-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
-                    >
-                      {t('common.retry')}
-                    </button>
-                    <span className="text-xs text-slate-600">
-                      {data ? t('analysis.previousKept') : t('analysis.chatgptHint')}
-                    </span>
+                    {permanent ? (
+                      <button
+                        type="button"
+                        onClick={onOpenAISettings}
+                        className="min-h-11 bg-sky-700 px-4 text-sm font-bold text-white transition hover:bg-sky-800"
+                      >
+                        {t('analysis.useOwnAI')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        className="bg-sky-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
+                      >
+                        {t('common.retry')}
+                      </button>
+                    )}
+                    {data && <span className="text-xs text-slate-600">{t('analysis.previousKept')}</span>}
+                    {!data && !permanent && <span className="text-xs text-slate-600">{t('analysis.chatgptHint')}</span>}
                   </div>
                 </section>
               )}
@@ -162,7 +191,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
                   <p className="text-sm font-bold text-sky-700">{t('analysis.chatgpt.title')}</p>
                   <button
                     type="button"
-                    onClick={() => setIsChatGptOpen((open) => !open)}
+                    onClick={() => setIsChatGptOpen(!isChatGptOpen)}
                     aria-expanded={isChatGptOpen}
                     className="text-sm font-bold text-sky-700 transition hover:text-slate-900"
                   >
@@ -171,6 +200,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
                 </div>
                 {isChatGptOpen && (
                   <div className="mt-3 space-y-3 border-t border-sky-100 pt-3">
+                    <p className="text-xs leading-5 text-slate-600">{t('analysis.chatgpt.dataNote')}</p>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"

@@ -52,6 +52,13 @@ export function readClientIpHeader(value) {
 }
 
 const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+/**
+ * The shared site AI is opt-in. v1 ships with it disabled: AI reflections use the visitor's own
+ * provider (sent from the browser) or the ChatGPT copy/paste bridge. Enabling it needs both
+ * SITE_AI_ENABLED=true and DEEPSEEK_API_KEY, plus durable quotas and a provider spending limit
+ * (docs/deployment.md). Disabled means fail closed: no quota use, no body read, no upstream call.
+ */
+const siteAIEnabled = readBoolean(process.env.SITE_AI_ENABLED, false) && Boolean(deepseekApiKey);
 const deepseekBaseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/chat/completions';
 const deepseekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
 const configuredCorsOrigins = process.env.CORS_ORIGINS ?? process.env.CORS_ORIGIN ?? '';
@@ -59,6 +66,8 @@ const maxBodyBytes = readPositiveInteger(process.env.AI_MAX_BODY_BYTES, 128 * 10
 const maxPromptChars = readPositiveInteger(process.env.AI_MAX_PROMPT_CHARS, 60_000);
 const maxUpstreamResponseBytes = readPositiveInteger(process.env.AI_MAX_RESPONSE_BYTES, 512_000);
 const upstreamTimeoutMs = readPositiveInteger(process.env.AI_TIMEOUT_MS, 45_000);
+// The taste report needs about 1–2k output tokens; a low cap bounds the cost of any single request.
+const maxOutputTokens = readPositiveInteger(process.env.AI_MAX_OUTPUT_TOKENS, 4_000);
 const rateLimitWindowMs = 60_000;
 const rateLimitMax = readPositiveInteger(process.env.AI_RATE_LIMIT_PER_MINUTE, 10);
 const globalRateLimitMax = readPositiveInteger(process.env.AI_GLOBAL_RATE_LIMIT_PER_MINUTE, rateLimitMax * 10);
@@ -83,6 +92,14 @@ let activeAIRequests = 0;
 if (!allowedModels.size) allowedModels.add(deepseekModel);
 if (isProduction && configuredCorsOrigins.split(',').some((origin) => origin.trim() === '*')) {
   throw new Error('CORS_ORIGIN=* is not allowed in production; configure CORS_ORIGINS explicitly.');
+}
+
+if (process.env.SITE_AI_ENABLED === 'true' && !deepseekApiKey) {
+  console.warn('[AI proxy] SITE_AI_ENABLED=true but DEEPSEEK_API_KEY is missing: the site AI stays disabled.');
+} else if (deepseekApiKey && !siteAIEnabled) {
+  console.warn('[AI proxy] DEEPSEEK_API_KEY is set but SITE_AI_ENABLED is not "true": the site AI stays disabled.');
+} else if (!siteAIEnabled) {
+  console.log('[AI proxy] Site AI is disabled (default). Personal AI services and the ChatGPT bridge still work.');
 }
 
 if (isProduction && process.env.AI_QUOTA_REDIS_URL && !process.env.AI_QUOTA_REDIS_TOKEN) {
@@ -117,7 +134,8 @@ if (isProduction && !corsOrigins.size) {
   );
 }
 
-if (isProduction && !clientIpOptions.trustedProxyHops && !clientIpOptions.clientIpHeader) {
+// Per-IP limits only apply when the site AI is enabled, so only then is this worth a warning.
+if (isProduction && siteAIEnabled && !clientIpOptions.trustedProxyHops && !clientIpOptions.clientIpHeader) {
   console.warn(
     '[AI proxy] TRUST_PROXY/CLIENT_IP_HEADER are not set: per-IP limits use the socket peer. Behind a reverse proxy all visitors may share one bucket; see docs/deployment.md.'
   );
@@ -169,7 +187,7 @@ const getCorsHeaders = (req) => {
   const origin = req.headers.origin;
   const headers = {
     Vary: 'Origin',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 
@@ -315,8 +333,8 @@ const handleDeepSeek = async (req, res) => {
     return;
   }
 
-  if (!deepseekApiKey) {
-    sendError(req, res, 503, 'AI_NOT_CONFIGURED', 'AI service is not configured.');
+  if (!siteAIEnabled) {
+    sendError(req, res, 503, 'AI_NOT_CONFIGURED', 'The site AI service is not enabled.');
     return;
   }
 
@@ -402,7 +420,7 @@ const handleDeepSeek = async (req, res) => {
         body: JSON.stringify({
           model: [...allowedModels][0],
           messages: [{ role: 'user', content: prompt }],
-          max_tokens: 10_000,
+          max_tokens: maxOutputTokens,
           response_format: { type: 'json_object' },
         }),
         signal: controller.signal,
@@ -549,6 +567,19 @@ export const createAppServer = ({ staticRoot = distDir } = {}) =>
       const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
       if (requestUrl.pathname === '/api/deepseek/chat') {
         await handleDeepSeek(req, res);
+        return;
+      }
+      if (requestUrl.pathname === '/api/deepseek/status') {
+        // Public and configuration-free: lets the client skip uploading a prompt when the site AI is off.
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          sendError(req, res, 405, 'METHOD_NOT_ALLOWED', 'Method not allowed.');
+          return;
+        }
+        sendJson(req, res, 200, { siteAI: siteAIEnabled ? 'enabled' : 'disabled' });
+        return;
+      }
+      if (requestUrl.pathname.startsWith('/api/')) {
+        sendError(req, res, 404, 'NOT_FOUND', 'Not found.');
         return;
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') {

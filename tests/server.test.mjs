@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 process.env.DEEPSEEK_API_KEY = 'test-server-key';
+process.env.SITE_AI_ENABLED = 'true';
 process.env.CORS_ORIGINS = 'http://allowed.example';
 process.env.AI_RATE_LIMIT_PER_MINUTE = '100';
 process.env.AI_REQUIRE_ORIGIN = 'true';
@@ -109,6 +110,50 @@ describe('AI proxy boundary', () => {
     expect(response.status).toBe(200);
     const upstreamBody = JSON.parse(upstreamCalls.at(-1).init.body);
     expect(upstreamBody.model).toBe('deepseek-v4-flash');
+  });
+
+  it('rejects oversized bodies and prompts before calling the upstream', async () => {
+    const before = upstreamCalls.length;
+    const headers = { Origin: 'http://allowed.example', 'Content-Type': 'application/json' };
+    const tooBig = await request('/api/deepseek/chat', {
+      headers,
+      body: JSON.stringify({ prompt: 'x'.repeat(140 * 1024) }),
+    });
+    expect(tooBig.status).toBe(413);
+    expect(JSON.parse(tooBig.body).error).toBe('REQUEST_TOO_LARGE');
+    const longPrompt = await request('/api/deepseek/chat', {
+      headers,
+      body: JSON.stringify({ prompt: 'x'.repeat(60_001) }),
+    });
+    expect(longPrompt.status).toBe(413);
+    expect(JSON.parse(longPrompt.body).error).toBe('PROMPT_TOO_LARGE');
+    expect(upstreamCalls).toHaveLength(before);
+  });
+
+  it('maps upstream failures to coded errors without echoing the upstream body', async () => {
+    const previous = globalThis.fetch;
+    globalThis.fetch = async () => new Response('secret upstream detail sk-123', { status: 500 });
+    try {
+      const response = await request('/api/deepseek/chat', {
+        headers: { Origin: 'http://allowed.example', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'hello' }),
+      });
+      expect(response.status).toBe(502);
+      expect(JSON.parse(response.body).error).toBe('AI_UPSTREAM_ERROR');
+      expect(response.body).not.toContain('secret upstream detail');
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it('caps output tokens and reports the site AI as enabled when explicitly configured', async () => {
+    await request('/api/deepseek/chat', {
+      headers: { Origin: 'http://allowed.example', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hello' }),
+    });
+    expect(JSON.parse(upstreamCalls.at(-1).init.body).max_tokens).toBe(4000);
+    const status = await request('/api/deepseek/status', { method: 'GET' });
+    expect(JSON.parse(status.body)).toEqual({ siteAI: 'enabled' });
   });
 
   it('serves HEAD requests without a response body', async () => {

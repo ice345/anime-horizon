@@ -28,10 +28,23 @@ interface StorageLike {
   removeItem(key: string): void;
 }
 
+/**
+ * Stored archive data that could not be read as-is. While this is set, the app must not write the
+ * archive back: the original bytes stay in place until the user downloads them or explicitly
+ * chooses to keep only the readable titles.
+ */
+export interface ArchiveIntegrityIssue {
+  /** Stored records that failed validation (or exceeded the 2,000-title cap). */
+  droppedRecords: number;
+  /** The stored details payload could not be parsed at all. */
+  unreadable: boolean;
+}
+
 export interface ArchiveStorageState {
   selectedIds: Set<string>;
   selectedAnimeDetails: Map<string, Anime>;
   recovered: boolean;
+  integrity: ArchiveIntegrityIssue | null;
   /** The schema version that was read; records are always returned migrated to ARCHIVE_SCHEMA_VERSION. */
   schemaVersion: number;
 }
@@ -91,20 +104,35 @@ export const migrateArchiveRecord = (entry: unknown, fromVersion: number = ARCHI
 };
 
 const parseDetails = (raw: string | null, schemaVersion: number) => {
-  if (!raw) return new Map<string, Anime>();
+  if (!raw) return { details: new Map<string, Anime>(), dropped: 0 };
   const value: unknown = JSON.parse(raw);
   if (!Array.isArray(value)) throw new Error('Archive detail data is not an array');
 
   const details = new Map<string, Anime>();
+  let dropped = Math.max(0, value.length - 2_000);
   for (const entry of value.slice(0, 2_000)) {
     try {
       const anime = migrateArchiveRecord(entry, schemaVersion);
       details.set(anime.id, anime);
     } catch {
-      // Ignore one damaged entry and keep the rest of the local archive usable.
+      // Keep the rest usable, but count it: the caller must not overwrite the original data.
+      dropped += 1;
     }
   }
-  return details;
+  return { details, dropped };
+};
+
+/** The raw stored archive keys, exactly as persisted, for a "download original data" escape hatch. */
+export const readRawArchivePayload = (storage: StorageLike | null = getStorage()) => {
+  const raw: Record<string, string | null> = {};
+  Object.values(ARCHIVE_STORAGE_KEYS).forEach((key) => {
+    try {
+      raw[key] = storage?.getItem(key) ?? null;
+    } catch {
+      raw[key] = null;
+    }
+  });
+  return raw;
 };
 
 export const loadArchiveState = (storage: StorageLike | null = getStorage()): ArchiveStorageState => {
@@ -113,6 +141,7 @@ export const loadArchiveState = (storage: StorageLike | null = getStorage()): Ar
       selectedIds: new Set(),
       selectedAnimeDetails: new Map(),
       recovered: false,
+      integrity: null,
       schemaVersion: ARCHIVE_SCHEMA_VERSION,
     };
   let schemaVersion = LEGACY_ARCHIVE_SCHEMA_VERSION;
@@ -124,25 +153,31 @@ export const loadArchiveState = (storage: StorageLike | null = getStorage()): Ar
   let selectedIds = new Set<string>();
   let selectedAnimeDetails = new Map<string, Anime>();
   let recovered = false;
+  let integrity: ArchiveIntegrityIssue | null = null;
   try {
     selectedIds = parseIds(storage.getItem(ARCHIVE_STORAGE_KEYS.selectedIds));
   } catch {
     recovered = true;
   }
   try {
-    selectedAnimeDetails = parseDetails(storage.getItem(ARCHIVE_STORAGE_KEYS.details), schemaVersion);
+    const parsed = parseDetails(storage.getItem(ARCHIVE_STORAGE_KEYS.details), schemaVersion);
+    selectedAnimeDetails = parsed.details;
+    if (parsed.dropped > 0) integrity = { droppedRecords: parsed.dropped, unreadable: false };
   } catch {
     recovered = true;
+    integrity = { droppedRecords: 0, unreadable: true };
   }
+  if (integrity) recovered = true;
   if (selectedAnimeDetails.size > 0) {
     return {
       selectedIds: new Set(selectedAnimeDetails.keys()),
       selectedAnimeDetails,
       recovered: recovered || selectedAnimeDetails.size !== selectedIds.size,
+      integrity,
       schemaVersion,
     };
   }
-  return { selectedIds, selectedAnimeDetails, recovered, schemaVersion };
+  return { selectedIds, selectedAnimeDetails, recovered, integrity, schemaVersion };
 };
 
 export const saveArchiveState = (

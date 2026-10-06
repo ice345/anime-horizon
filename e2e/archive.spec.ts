@@ -212,13 +212,16 @@ test.describe('AI analysis failures', () => {
     await mockAniList(page);
     await seedArchive(page, [entry(1)]);
     let calls = 0;
+    // These tests exercise a deployment that has explicitly enabled the site AI.
+    await page.route('**/api/deepseek/status', (route) => route.fulfill({ json: { siteAI: 'enabled' } }));
     await page.route('**/api/deepseek/chat', async (route) => {
       calls += 1;
       if (calls <= 2) {
+        // A temporary upstream failure: retryable, unlike "site AI not enabled".
         await route.fulfill({
-          status: 503,
+          status: 502,
           contentType: 'application/json',
-          body: JSON.stringify({ error: 'AI_NOT_CONFIGURED' }),
+          body: JSON.stringify({ error: 'AI_UPSTREAM_UNAVAILABLE' }),
         });
         return;
       }

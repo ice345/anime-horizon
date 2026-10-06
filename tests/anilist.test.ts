@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildAnimeCacheKey,
   clearAnimeCache,
   fetchAnimeBySeason,
   fetchRecommendationGraph,
+  AniListTimeoutError,
   MAX_SEASON_PAGES,
 } from '../services/anilistService';
 
@@ -284,5 +285,40 @@ describe('AniList catalogue service', () => {
     expect(graph.nodes).toHaveLength(20);
     await fetchRecommendationGraph(ids);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  describe('request timeout', () => {
+    const hangingFetch = () =>
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        (_input, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          })
+      );
+
+    afterEach(() => vi.useRealTimers());
+
+    it('turns a hung AniList request into a visible timeout after bounded retries, never an empty result', async () => {
+      vi.useFakeTimers();
+      const fetchMock = hangingFetch();
+      const result = fetchAnimeBySeason(2023, 'FALL').catch((error) => error);
+      await vi.advanceTimersByTimeAsync(4 * 20_000 + 3 * 2_000 + 100);
+      expect(await result).toBeInstanceOf(AniListTimeoutError);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    it('keeps a caller cancellation as a cancellation, without retries', async () => {
+      vi.useFakeTimers();
+      const fetchMock = hangingFetch();
+      const controller = new AbortController();
+      const result = fetchAnimeBySeason(2023, 'WINTER', controller.signal).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(1_000);
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(1);
+      const error = await result;
+      expect(error).not.toBeInstanceOf(AniListTimeoutError);
+      expect(error.name).toBe('AbortError');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 });

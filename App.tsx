@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GuidePage } from './components/GuidePage';
 import { JourneyPage } from './components/pages/JourneyPage';
+import { ArchiveRecoveryNotice } from './components/ArchiveRecoveryNotice';
 import { MyAnimePage } from './components/pages/MyAnimePage';
 import { NotFoundPage } from './components/pages/NotFoundPage';
 import { SettingsPage } from './components/pages/SettingsPage';
@@ -37,6 +38,7 @@ import {
 import {
   clearArchiveState,
   loadArchiveState,
+  readRawArchivePayload,
   saveArchiveState,
   subscribeToArchiveStorage,
 } from './shared/storage/archiveStorage';
@@ -121,6 +123,8 @@ export default function App() {
     () => new Map(initialArchiveState.selectedAnimeDetails)
   );
   const archiveStorageSyncRef = useRef(false);
+  /** Stored data that couldn't be fully read: saving is paused until the user resolves it. */
+  const [integrityIssue, setIntegrityIssue] = useState(initialArchiveState.integrity);
   const [route, setRoute] = useState<AppRoute>(readRouteFromLocation);
   const [yearRange, setYearRange] = useState<{ start: number; end: number }>(loadSavedYearRange);
   const years = useMemo(() => buildYears(yearRange.start, yearRange.end), [yearRange]);
@@ -173,6 +177,7 @@ export default function App() {
   useEffect(() => {
     return subscribeToArchiveStorage((state) => {
       archiveStorageSyncRef.current = true;
+      setIntegrityIssue(state.integrity);
       setSelectedIds(state.selectedIds);
       setSelectedAnimeDetails(state.selectedAnimeDetails);
     });
@@ -183,6 +188,8 @@ export default function App() {
       archiveStorageSyncRef.current = false;
       return;
     }
+    // Never overwrite stored data that failed to load; the original stays until the user decides.
+    if (integrityIssue) return;
     let feedbackTimer: number | undefined;
     try {
       saveArchiveState({ selectedIds, selectedAnimeDetails });
@@ -192,7 +199,7 @@ export default function App() {
     return () => {
       if (feedbackTimer !== undefined) window.clearTimeout(feedbackTimer);
     };
-  }, [selectedIds, selectedAnimeDetails, showFeedback]);
+  }, [selectedIds, selectedAnimeDetails, showFeedback, integrityIssue]);
 
   useEffect(() => {
     try {
@@ -261,7 +268,29 @@ export default function App() {
     setCatalogueReloadKey((value) => value + 1);
   };
 
+  const downloadFile = (contents: string, name: string) => {
+    const blob = new Blob([contents], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = name;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadOriginalArchive = () =>
+    downloadFile(
+      JSON.stringify({ exportedAt: new Date().toISOString(), localStorage: readRawArchivePayload() }, null, 2),
+      `anime_horizon_original_data_${new Date().toISOString().slice(0, 10)}.json`
+    );
+
+  const handleKeepReadableArchive = () => {
+    if (!window.confirm(t('recovery.confirmKeep', { count: selectedAnimeDetails.size }))) return;
+    setIntegrityIssue(null);
+  };
+
   const handleClearSelection = () => {
+    setIntegrityIssue(null);
     setSelectedIds(new Set());
     setSelectedAnimeDetails(new Map());
     clearAnalyses();
@@ -281,13 +310,10 @@ export default function App() {
       userDetails: Array.from(selectedAnimeDetails.values()),
       currentViewData: animeList.slice(0, 500),
     });
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `anime_horizon_backup_${new Date().toISOString().slice(0, 10)}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadFile(
+      JSON.stringify(exportData, null, 2),
+      `anime_horizon_backup_${new Date().toISOString().slice(0, 10)}.json`
+    );
   };
 
   const handleImportJson = (file: File): Promise<NormalizedBackup> =>
@@ -371,6 +397,14 @@ export default function App() {
     else addAnime(anime);
   };
 
+  /**
+   * Discover, Featured and search are add-only: looking at or clicking a saved title there never
+   * removes it. Removal is an explicit, confirmed action in My Anime.
+   */
+  const addFromCatalogue = (anime: Anime) => {
+    if (!selectedIds.has(String(anime.id))) addAnime(anime);
+  };
+
   // Status changes record user history (startedAt / completedAt / updatedAt); see applyStatusChange.
   const handleUpdateAnimeStatus = (id: string, userStatus: UserAnimeStatus) => {
     setSelectedAnimeDetails((previous) => {
@@ -447,6 +481,14 @@ export default function App() {
     <div className="ah-shell relative overflow-hidden font-sans text-yearbook-ink">
       <DecorativeBackground />
       <SiteHeader active={route.name} onNavigate={goTo} onSearch={() => setIsGlobalSearchOpen(true)} />
+      {integrityIssue && (
+        <ArchiveRecoveryNotice
+          issue={integrityIssue}
+          readableCount={selectedAnimeDetails.size}
+          onDownloadOriginal={handleDownloadOriginalArchive}
+          onKeepReadable={handleKeepReadableArchive}
+        />
+      )}
       {route.name === 'discover' && (
         <YearNavigation
           years={years}
@@ -461,7 +503,7 @@ export default function App() {
           year={displayedYear}
           selectedIds={selectedIds}
           selectedAnime={fullArchive}
-          onToggle={toggleAnime}
+          onToggle={(_id, anime) => addFromCatalogue(anime)}
           onOpenMyAnime={(tab?: MyAnimeTab) => navigateTo({ name: 'myAnime', status: tab })}
           onOpenRecommendations={() => setIsRecommendationsOpen(true)}
           onAnimeLoaded={setAnimeList}
@@ -531,6 +573,10 @@ export default function App() {
             archive={fullArchive}
             chatGptPrompt={chatGptAnalysisPrompt}
             onImportChatGPT={handleImportChatGptAnalysis}
+            onOpenAISettings={() => {
+              setIsModalOpen(false);
+              setIsAISettingsOpen(true);
+            }}
             onOpenRecommendations={() => {
               // Recommendations live in Discover, which also loads the season they fall back to.
               setIsModalOpen(false);
@@ -559,7 +605,7 @@ export default function App() {
             isOpen={isGlobalSearchOpen}
             onClose={() => setIsGlobalSearchOpen(false)}
             selectedIds={selectedIds}
-            onToggle={(anime) => toggleAnime(String(anime.id), anime)}
+            onToggle={addFromCatalogue}
             minYear={DEFAULT_START_YEAR}
             maxYear={DEFAULT_END_YEAR}
           />

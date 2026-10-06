@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { loadArchiveState, saveArchiveState, ARCHIVE_STORAGE_KEYS } from '../shared/storage/archiveStorage';
+import {
+  ARCHIVE_STORAGE_KEYS,
+  loadArchiveState,
+  readRawArchivePayload,
+  saveArchiveState,
+} from '../shared/storage/archiveStorage';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -78,5 +83,51 @@ describe('retired storage', () => {
     clearRetiredStorage(storage);
     expect(storage.getItem('anime-horizon-game-stats-v1')).toBeNull();
     expect(storage.getItem(ARCHIVE_STORAGE_KEYS.details)).toBe('[]');
+  });
+});
+
+describe('stored data that fails validation is never silently destroyed', () => {
+  const valid = { ...anime, id: '1' };
+  const badReaction = { ...anime, id: '2', userReaction: 'MEH' };
+  const longNote = { ...anime, id: '3', userNote: 'x'.repeat(281) };
+  const badTitle = { ...anime, id: '4', title: 42 };
+
+  const seeded = (details: string) => {
+    const storage = new MemoryStorage();
+    storage.setItem(ARCHIVE_STORAGE_KEYS.details, details);
+    storage.setItem(ARCHIVE_STORAGE_KEYS.selectedIds, JSON.stringify(['1', '2', '3', '4']));
+    storage.setItem(ARCHIVE_STORAGE_KEYS.schemaVersion, '5');
+    return storage;
+  };
+
+  it.each([
+    ['an invalid reaction value', [valid, badReaction], 1],
+    ['an over-long note', [valid, longNote], 1],
+    ['a malformed title object', [valid, badTitle], 1],
+    ['all three at once', [valid, badReaction, longNote, badTitle], 3],
+  ])('reports %s and leaves the original bytes untouched', (_label, records, dropped) => {
+    const raw = JSON.stringify(records);
+    const storage = seeded(raw);
+    const state = loadArchiveState(storage);
+
+    expect(state.integrity).toEqual({ droppedRecords: dropped, unreadable: false });
+    expect([...state.selectedAnimeDetails.keys()]).toEqual(['1']);
+    expect(storage.getItem(ARCHIVE_STORAGE_KEYS.details)).toBe(raw);
+    expect(readRawArchivePayload(storage)[ARCHIVE_STORAGE_KEYS.details]).toBe(raw);
+  });
+
+  it('reports an unparseable payload without replacing it', () => {
+    const storage = seeded('{not json');
+    const state = loadArchiveState(storage);
+    expect(state.integrity).toEqual({ droppedRecords: 0, unreadable: true });
+    expect(storage.getItem(ARCHIVE_STORAGE_KEYS.details)).toBe('{not json');
+  });
+
+  it('reports nothing for valid released-version data, which keeps migrating automatically', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(ARCHIVE_STORAGE_KEYS.details, JSON.stringify([{ ...anime, userReaction: 'NEUTRAL' }]));
+    const state = loadArchiveState(storage);
+    expect(state.integrity).toBeNull();
+    expect(state.selectedAnimeDetails.get('77')?.userReaction).toBeUndefined();
   });
 });

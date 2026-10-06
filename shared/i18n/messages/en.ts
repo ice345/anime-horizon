@@ -169,7 +169,7 @@ export const en = {
   },
   card: {
     add: 'Add to archive: {title}',
-    remove: 'Remove from archive: {title}',
+    inMyAnime: 'In My Anime',
     statusAria: 'Watch status for {title}',
     reactionAria: 'Rating for {title}',
     noteAria: 'Note for {title}',
@@ -235,6 +235,25 @@ export const en = {
     result: 'You remembered {score} of {count}.',
     again: 'Play again',
     noImpact: 'Recall only tests memory. Answers aren’t saved and don’t affect anything else.',
+  },
+  recovery: {
+    title: 'Some of your saved data couldn’t be read',
+    dropped: {
+      one: '{count} saved title couldn’t be read, so {readable} are shown. Nothing has been deleted: the original data is still stored in this browser.',
+      other:
+        '{count} saved titles couldn’t be read, so {readable} are shown. Nothing has been deleted: the original data is still stored in this browser.',
+    },
+    unreadable:
+      'Your saved list couldn’t be read. Nothing has been deleted: the original data is still stored in this browser.',
+    paused:
+      'Changes you make now aren’t saved until you choose what to do. Download the original data first if you might need it.',
+    download: 'Download original data',
+    keepReadable: 'Keep the readable titles',
+    confirmKeep: {
+      one: 'Replace the stored data with the {count} readable title? The unreadable data will be removed from this browser.',
+      other:
+        'Replace the stored data with the {count} readable titles? The unreadable data will be removed from this browser.',
+    },
   },
   tasteMap: {
     viewsLabel: 'Journey views',
@@ -343,6 +362,8 @@ export const en = {
     reflections: {
       title: 'AI reflections (experimental)',
       note: 'An AI writes a report from the evidence above. It can misread things — your own reactions are the source of truth.',
+      dataNote:
+        'Generating a report sends, for up to 512 titles in My Anime: the title, its public AniList details (year, format, genres, score), your status and reaction, your notes for the titles it highlights, and your Taste Map counts. Dates aren’t sent. With your own AI service (Settings → AI & privacy) this goes straight from your browser to that provider; with ChatGPT you copy and paste it yourself.',
       report: 'Generate taste report',
       portrait: 'All-time portrait',
     },
@@ -439,7 +460,6 @@ export const en = {
     empty: 'Search by title to find anime from any year and add it to your archive.',
     error: 'Search isn’t available right now. Please try again later.',
     add: 'Add to archive',
-    remove: 'Remove from archive',
   },
   portrait: {
     eyebrow: 'Portrait',
@@ -469,6 +489,8 @@ export const en = {
     statusLine: 'Completed {completed} · Watching {watching} · Plan to Watch {plan}',
     close: 'Close taste report',
     loading: 'Putting your taste report together…',
+    notEnabledTitle: 'The built-in AI isn’t enabled',
+    useOwnAI: 'Use your own AI service',
     errorTitle: 'The taste report couldn’t be generated',
     previousKept: 'Your last successful report is kept below.',
     chatgptHint: 'You can also open ChatGPT below, generate a report there and paste it back.',
@@ -485,6 +507,7 @@ export const en = {
       copyFailed: 'Copy failed — please copy it manually',
       imported: 'Report imported from ChatGPT',
       invalid: 'Couldn’t read that JSON. Make sure you pasted the whole reply.',
+      dataNote: 'The copied prompt contains the same data. It only leaves your device when you paste it into ChatGPT.',
     },
     section: {
       review: 'Review',
@@ -646,7 +669,7 @@ export const en = {
     sourceSite: 'The built-in AI',
     sourcePersonal: 'Your personal model',
     notConfigured:
-      'The built-in AI service isn’t available yet. Try again later, or use ChatGPT to generate the report.',
+      'This site doesn’t run a built-in AI service. To generate a report, connect your own AI service in Settings → AI & privacy, or use ChatGPT below.',
     originRejected:
       'The built-in AI service declined this request. Try again later, or use ChatGPT to generate the report.',
     emptyResult: '{source} returned an empty result with nothing to show. Please retry.',
@@ -660,6 +683,8 @@ export const en = {
       'Your personal model couldn’t be reached. If the key and balance are fine, the service may not allow requests from browsers, or the URL may be wrong. You can also switch back to the built-in service.',
     siteUnavailable:
       'The built-in AI is temporarily unavailable. Please try again later, or use ChatGPT to generate the report.',
+    tooLarge:
+      'Your archive is too large for this AI request, so retrying won’t help. Copy the prompt to ChatGPT below instead (very long prompts can be too long there as well), or use your own AI service if it accepts longer requests.',
   },
   myAnime: {
     eyebrow: 'My Anime',

@@ -47,8 +47,9 @@ const CardBody: React.FC<{
   className: string;
   children: React.ReactNode;
 }> = ({ isArchiveEntry, selected, onToggle, label, className, children }) =>
-  isArchiveEntry || !onToggle ? (
-    // Inside the archive the cover and title are content, never a removal shortcut.
+  isArchiveEntry || !onToggle || selected ? (
+    // Cover and title are content, never a removal shortcut: inside My Anime, and for titles already
+    // saved when shown elsewhere (removal is an explicit, confirmed action in My Anime).
     <div className={className}>{children}</div>
   ) : (
     <button type="button" onClick={onToggle} aria-pressed={selected} aria-label={label} className={className}>
@@ -150,7 +151,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
         isArchiveEntry={isArchiveEntry}
         selected={selected}
         onToggle={onToggle}
-        label={t(selected ? 'card.remove' : 'card.add', { title: displayTitle })}
+        label={t('card.add', { title: displayTitle })}
         className={`group relative w-full text-left ${isList ? 'flex min-h-36' : ''}`}
       >
         <div
@@ -198,6 +199,9 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({
               <span className="shrink-0 font-medium text-yearbook-sky">{formatScore(anime.averageScore)}</span>
             )}
           </div>
+          {selected && !isArchiveEntry && (
+            <p className="mt-2 text-[11px] font-medium text-yearbook-rose">{t('card.inMyAnime')}</p>
+          )}
           {isList && (
             <div className="mt-2 space-y-1.5 text-xs leading-5 text-yearbook-muted">
               <p>

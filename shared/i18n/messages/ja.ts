@@ -162,7 +162,7 @@ export const ja: Messages = {
   },
   card: {
     add: '年鑑に追加：{title}',
-    remove: '年鑑から外す：{title}',
+    inMyAnime: 'マイアニメに追加済み',
     statusAria: '{title}の視聴状況',
     reactionAria: '{title}の評価',
     noteAria: '{title}のひとこと感想',
@@ -227,6 +227,23 @@ export const ja: Messages = {
     result: '{count}問中{score}問、覚えていました。',
     again: 'もう一度',
     noImpact: '思い出クイズは記憶をたしかめるだけのものです。答えは保存されず、ほかの機能にも影響しません。',
+  },
+  recovery: {
+    title: '保存したデータの一部を読み込めませんでした',
+    dropped: {
+      other:
+        '保存した作品のうち{count}件を読み込めなかったため、{readable}件を表示しています。何も削除されていません。元のデータはこのブラウザに残っています。',
+    },
+    unreadable:
+      '保存したリストを読み込めませんでした。何も削除されていません。元のデータはこのブラウザに残っています。',
+    paused:
+      'どうするか選ぶまで、ここでの変更は保存されません。必要になりそうなら、先に元のデータをダウンロードしてください。',
+    download: '元のデータをダウンロード',
+    keepReadable: '読み込めた作品だけを残す',
+    confirmKeep: {
+      other:
+        '保存データを、読み込めた{count}件の作品で置き換えますか？読み込めなかったデータはこのブラウザから削除されます。',
+    },
   },
   tasteMap: {
     viewsLabel: 'あゆみの表示',
@@ -325,6 +342,8 @@ export const ja: Messages = {
     reflections: {
       title: 'AIによるふりかえり（試験的）',
       note: 'AIが上の手がかりをもとにレポートを書きます。読み違えることもあるので、あなた自身の感想を基準にしてください。',
+      dataNote:
+        'レポートを作ると、マイアニメの作品（最大512件）について、作品名、AniListの公開情報（放送年・形式・ジャンル・評価）、あなたの視聴状況と感想、主な作品につけたひとこと感想、好みのマップの集計が送られます。日付は送られません。自分のAIサービス（設定 → AIとプライバシー）を使う場合はブラウザから直接そのサービスへ、ChatGPTを使う場合はあなた自身がコピーして貼り付けます。',
       report: '鑑賞レポートを作成',
       portrait: '全期間まとめ',
     },
@@ -413,7 +432,6 @@ export const ja: Messages = {
     empty: 'タイトルで検索すると、どの年の作品でも年鑑に追加できます。',
     error: '現在検索できません。しばらくしてからもう一度お試しください。',
     add: '年鑑に追加',
-    remove: '年鑑から外す',
   },
   portrait: {
     eyebrow: 'Portrait',
@@ -440,6 +458,8 @@ export const ja: Messages = {
     statusLine: '視聴完了 {completed} · 視聴中 {watching} · 見たい {plan}',
     close: '鑑賞レポートを閉じる',
     loading: '鑑賞レポートをまとめています…',
+    notEnabledTitle: '内蔵AIは有効になっていません',
+    useOwnAI: '自分のAIサービスを使う',
     errorTitle: '鑑賞レポートを作成できませんでした',
     previousKept: '前回作成したレポートを下に残しています。',
     chatgptHint: '下の「ChatGPTを使う」から、ChatGPTで作成した結果を貼り付けることもできます。',
@@ -456,6 +476,7 @@ export const ja: Messages = {
       copyFailed: 'コピーできませんでした。手動でコピーしてください',
       imported: 'ChatGPTのレポートを読み込みました',
       invalid: 'JSONを読み取れませんでした。返答全体を貼り付けたか確認してください。',
+      dataNote: 'コピーしたプロンプトにも同じ内容が含まれます。ChatGPTに貼り付けるまで、端末の外には出ません。',
     },
     section: {
       review: '講評',
@@ -604,7 +625,7 @@ export const ja: Messages = {
     sourceSite: '標準のAI',
     sourcePersonal: '個人設定のモデル',
     notConfigured:
-      '標準のAIサービスは現在利用できません。しばらくしてから再試行するか、ChatGPTでレポートを作成してください。',
+      'このサイトには内蔵のAIサービスがありません。レポートを作るには、「設定 → AIとプライバシー」で自分のAIサービスを設定するか、下のChatGPTを使ってください。',
     originRejected:
       '標準のAIサービスがこのリクエストを受け付けませんでした。しばらくしてから再試行するか、ChatGPTでレポートを作成してください。',
     emptyResult: '{source}から空の結果が返ってきたため、表示できる内容がありません。もう一度お試しください。',
@@ -620,6 +641,8 @@ export const ja: Messages = {
       '個人設定のモデルに接続できませんでした。キーと残高に問題がなければ、ブラウザからのリクエストが許可されていないか、URLが間違っている可能性があります。標準のサービスに戻すこともできます。',
     siteUnavailable:
       '標準のAIは一時的に利用できません。しばらくしてから再試行するか、ChatGPTでレポートを作成してください。',
+    tooLarge:
+      'マイアニメの作品数が多すぎて、このAIリクエストでは処理できません。再試行しても結果は変わりません。下のChatGPTにプロンプトをコピーするか（長すぎるとそちらでも扱えないことがあります）、より長いリクエストに対応した自分のAIサービスを使ってください。',
   },
   myAnime: {
     eyebrow: 'My Anime',
