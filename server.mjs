@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createReadStream, statSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createQuotaStore, QuotaStoreUnavailableError } from './quotaStore.mjs';
@@ -27,6 +28,29 @@ function readPositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function readBoolean(value, fallback) {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
+}
+
+/**
+ * Number of reverse proxies in front of this server that append to X-Forwarded-For.
+ * `TRUST_PROXY=true` is treated as one hop. 0 (default) ignores forwarding headers.
+ */
+export function readTrustedProxyHops(value) {
+  if (value === 'true') return 1;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 10 ? parsed : 0;
+}
+
+export function readClientIpHeader(value) {
+  const header = String(value || '')
+    .trim()
+    .toLowerCase();
+  return /^[a-z0-9-]{1,64}$/.test(header) && header !== 'x-forwarded-for' ? header : '';
+}
+
 const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
 const deepseekBaseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/chat/completions';
 const deepseekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
@@ -40,6 +64,13 @@ const rateLimitMax = readPositiveInteger(process.env.AI_RATE_LIMIT_PER_MINUTE, 1
 const globalRateLimitMax = readPositiveInteger(process.env.AI_GLOBAL_RATE_LIMIT_PER_MINUTE, rateLimitMax * 10);
 const globalDailyLimit = readPositiveInteger(process.env.AI_GLOBAL_RATE_LIMIT_PER_DAY, 10_000);
 const maxConcurrentRequests = readPositiveInteger(process.env.AI_MAX_CONCURRENCY, 2);
+// Browsers always send Origin on cross-origin and same-origin POST requests, so a missing
+// Origin means a non-browser client. Production rejects it by default.
+const requireOrigin = readBoolean(process.env.AI_REQUIRE_ORIGIN, isProduction);
+const clientIpOptions = {
+  trustedProxyHops: readTrustedProxyHops(process.env.TRUST_PROXY),
+  clientIpHeader: readClientIpHeader(process.env.CLIENT_IP_HEADER),
+};
 const quotaStore = createQuotaStore();
 const allowedModels = new Set(
   (process.env.AI_ALLOWED_MODELS || deepseekModel)
@@ -78,6 +109,18 @@ const corsOrigins = new Set(
 if (!isProduction && !corsOrigins.size) {
   corsOrigins.add('http://localhost:3000');
   corsOrigins.add('http://127.0.0.1:3000');
+}
+
+if (isProduction && !corsOrigins.size) {
+  console.warn(
+    '[AI proxy] CORS_ORIGINS is empty: every browser AI request will be rejected. Add the site origin, including for same-origin deployments.'
+  );
+}
+
+if (isProduction && !clientIpOptions.trustedProxyHops && !clientIpOptions.clientIpHeader) {
+  console.warn(
+    '[AI proxy] TRUST_PROXY/CLIENT_IP_HEADER are not set: per-IP limits use the socket peer. Behind a reverse proxy all visitors may share one bucket; see docs/deployment.md.'
+  );
 }
 
 const mimeTypes = {
@@ -194,13 +237,43 @@ const readBody = (req) =>
     });
   });
 
-const getClientIp = (req) => {
-  if (process.env.TRUST_PROXY === 'true') {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.trim()) return forwarded.split(',')[0].trim();
-  }
-  return req.socket.remoteAddress || 'unknown';
+const normalizeIp = (value) => {
+  const candidate = String(value || '')
+    .trim()
+    .replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '');
+  return isIP(candidate) ? candidate : '';
 };
+
+const headerValue = (value) => (Array.isArray(value) ? value.join(',') : value || '');
+
+/**
+ * Derives the client address used for per-IP rate limiting.
+ *
+ * - Default: the TCP peer address. It cannot be spoofed, but behind a reverse proxy it is the proxy.
+ * - `clientIpHeader`: a single-value header that the trusted edge overwrites (for example
+ *   `cf-connecting-ip`). Only safe when production verification shows clients cannot set it.
+ * - `trustedProxyHops`: reads X-Forwarded-For from the right. Each trusted proxy appends the
+ *   address it received the request from, so entries left of those are client-controlled and
+ *   are never used.
+ */
+export const resolveClientIp = (req, { trustedProxyHops = 0, clientIpHeader = '' } = {}) => {
+  const socketIp = normalizeIp(req.socket?.remoteAddress) || 'unknown';
+  if (clientIpHeader) {
+    const fromHeader = normalizeIp(headerValue(req.headers[clientIpHeader]).split(',')[0]);
+    if (fromHeader) return fromHeader;
+  }
+  if (trustedProxyHops > 0) {
+    const chain = headerValue(req.headers['x-forwarded-for'])
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const fromChain = normalizeIp(chain[chain.length - trustedProxyHops]);
+    if (fromChain) return fromChain;
+  }
+  return socketIp;
+};
+
+const getClientIp = (req) => resolveClientIp(req, clientIpOptions);
 
 export const resetRateLimitState = () => {
   quotaStore.reset();
@@ -209,7 +282,8 @@ export const resetRateLimitState = () => {
 
 const isAllowedOrigin = (req) => {
   const origin = req.headers.origin;
-  return !origin || corsOrigins.has(origin);
+  if (!origin) return !requireOrigin;
+  return corsOrigins.has(origin);
 };
 
 const validateUpstreamConfiguration = () => {
@@ -226,7 +300,8 @@ const validateUpstreamConfiguration = () => {
 
 const handleDeepSeek = async (req, res) => {
   if (!isAllowedOrigin(req)) {
-    sendError(req, res, 403, 'CORS_FORBIDDEN', 'Origin is not allowed.');
+    if (!req.headers.origin) sendError(req, res, 403, 'ORIGIN_REQUIRED', 'An allowed Origin header is required.');
+    else sendError(req, res, 403, 'CORS_FORBIDDEN', 'Origin is not allowed.');
     return;
   }
 

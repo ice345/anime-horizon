@@ -1,52 +1,51 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { buildPortraitImagePrompt, copyBridgePrompt, openChatGPT } from '../../services/chatgptBridge';
-import { buildTasteProfile } from '../../services/tasteProfile';
+import { buildTasteModel, genresByStance, TasteModel } from '../../features/taste/tasteModel';
 import { Anime, UserAnimeStatus } from '../../types';
 import { useModalA11y } from '../../hooks/useModalA11y';
+import { useI18n } from '../../shared/i18n/useI18n';
+import { genreLabel } from '../../shared/i18n/genres';
+import { statusKey } from '../../shared/i18n/keys';
 
 interface YearbookPortraitModalProps {
   isOpen: boolean;
   onClose: () => void;
-  year: number;
   anime: Anime[];
-  scope?: 'year' | 'archive';
 }
 
-const statusLabels: Record<UserAnimeStatus, string> = {
-  PLAN: '想看',
-  WATCHING: '追更',
-  COMPLETED: '已看完',
-};
+const PORTRAIT_STATUSES: UserAnimeStatus[] = ['COMPLETED', 'WATCHING', 'PLAN'];
+const eraKey = (lean: TasteModel['range']['eraLean']) => `tasteMap.era.${lean}` as const;
+const popularityKey = (lean: TasteModel['popularity']['lean']) => `tasteMap.popularity.${lean}` as const;
 
-export const YearbookPortraitModal: React.FC<YearbookPortraitModalProps> = ({
-  isOpen,
-  onClose,
-  year,
-  anime,
-  scope = 'year',
-}) => {
-  const profile = useMemo(() => buildTasteProfile(anime), [anime]);
+/**
+ * All-time portrait (experimental). Built only from watched titles and explicit reactions: favorite
+ * works, genres with positive reactions, and the descriptive viewing range. No identity labels.
+ */
+export const YearbookPortraitModal: React.FC<YearbookPortraitModalProps> = ({ isOpen, onClose, anime }) => {
+  const { t } = useI18n();
+  const model = useMemo(() => buildTasteModel(anime), [anime]);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const dialogRef = useRef<HTMLElement>(null);
   useModalA11y(isOpen, onClose, dialogRef);
-  const statusCounts = useMemo(
-    () => ({
-      PLAN: anime.filter((item) => (item.userStatus || 'PLAN') === 'PLAN').length,
-      WATCHING: anime.filter((item) => item.userStatus === 'WATCHING').length,
-      COMPLETED: anime.filter((item) => item.userStatus === 'COMPLETED').length,
-    }),
-    [anime]
-  );
-  const topGenres = useMemo(() => {
-    const counts = new Map<string, number>();
-    anime.flatMap((item) => item.genres || []).forEach((genre) => counts.set(genre, (counts.get(genre) || 0) + 1));
-    return Array.from(counts.entries())
-      .sort((left, right) => right[1] - left[1])
-      .slice(0, 3)
-      .map(([genre]) => genre);
-  }, [anime]);
-  const scopeTitle = scope === 'archive' ? '全站鉴赏画像' : `${year} 年度鉴赏画像`;
-  const imagePrompt = useMemo(() => buildPortraitImagePrompt(scopeTitle, anime, profile), [anime, profile, scopeTitle]);
+  const hasWatched = model.totals.watched > 0;
+  const positive = genresByStance(model).positive.slice(0, 3);
+  const explored = model.genres.slice(0, 3);
+  const covers = useMemo(() => {
+    if (model.favorites.length) return model.favorites;
+    const watched = anime.filter((item) => item.userStatus === 'COMPLETED' || item.userStatus === 'WATCHING');
+    return watched.slice(0, 8);
+  }, [anime, model.favorites]);
+  const statusCounts: Record<UserAnimeStatus, number> = {
+    COMPLETED: model.totals.completed,
+    WATCHING: model.totals.watching,
+    PLAN: model.totals.planned,
+  };
+  const { range, popularity } = model;
+  const eraText =
+    range.eraLean === 'mostlyOneDecade'
+      ? t('tasteMap.era.mostlyOneDecade', { decadeYear: range.mainDecade ?? 0 })
+      : t(eraKey(range.eraLean), { fromYear: range.earliestYear ?? 0, toYear: range.latestYear ?? 0 });
+  const imagePrompt = buildPortraitImagePrompt(model);
 
   const copyPrompt = async () => {
     try {
@@ -74,17 +73,19 @@ export const YearbookPortraitModal: React.FC<YearbookPortraitModalProps> = ({
           <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(98,159,220,0.35)_1px,transparent_1px)] [background-size:100%_28px]" />
           <div className="relative flex items-start justify-between gap-5">
             <div>
-              <p className="ah-section-label">Annual Portrait</p>
+              <p className="ah-section-label">{t('portrait.eyebrow')}</p>
               <h2 id="portrait-title" className="mt-2 font-jp text-3xl font-medium text-yearbook-ink">
-                {scopeTitle}
+                {t('portrait.title')}
               </h2>
-              <p className="mt-2 text-sm text-yearbook-muted">
-                由{scope === 'archive' ? '全部' : '这一年'}主动收录的 {anime.length} 部作品拼成。
-              </p>
+              {hasWatched && (
+                <p className="mt-2 text-sm text-yearbook-muted">
+                  {t('portrait.intro', { count: model.totals.watched })}
+                </p>
+              )}
             </div>
             <button
               type="button"
-              aria-label="关闭年度鉴赏画像"
+              aria-label={t('portrait.close')}
               onClick={onClose}
               className="grid h-10 w-10 place-items-center rounded-full bg-white/70 text-yearbook-muted transition hover:bg-white hover:text-yearbook-ink"
             >
@@ -93,82 +94,89 @@ export const YearbookPortraitModal: React.FC<YearbookPortraitModalProps> = ({
           </div>
         </div>
 
-        <div className="grid gap-7 p-6 sm:grid-cols-[minmax(0,1fr)_220px] sm:p-8">
-          <div>
-            <div className="grid grid-cols-4 gap-2">
-              {anime.slice(0, 8).map((item) => (
-                <img
-                  key={item.id}
-                  src={item.coverImage.large || item.coverImage.extraLarge}
-                  alt=""
-                  className="aspect-[3/4] w-full object-cover"
-                  loading="lazy"
-                />
-              ))}
-              {!anime.length && (
-                <div className="col-span-4 grid aspect-[3/2] place-items-center bg-yearbook-blue text-sm text-yearbook-muted">
-                  先收录一部作品
-                </div>
-              )}
-            </div>
-            <div className="mt-6 border-l-2 border-yearbook-pink bg-rose-50/65 px-4 py-3">
-              <p className="text-sm font-medium text-yearbook-ink">
-                {scope === 'archive' ? '完整年鉴中的你' : '这一年的你'}，是 {profile.rank}。
+        {!hasWatched ? (
+          <p className="px-6 py-10 text-center text-sm leading-6 text-yearbook-muted sm:px-8">{t('portrait.empty')}</p>
+        ) : (
+          <div className="grid gap-7 p-6 sm:grid-cols-[minmax(0,1fr)_220px] sm:p-8">
+            <div>
+              <p className="mb-2 text-xs font-medium text-yearbook-muted">
+                {model.favorites.length ? t('portrait.favoritesHeading') : t('portrait.watchedHeading')}
               </p>
-              <p className="mt-1 text-sm leading-6 text-yearbook-muted">
-                {topGenres.length
-                  ? `作品在 ${topGenres.join(' / ')} 之间来回停留，留下了${scope === 'archive' ? '完整年鉴' : `${year} 年`}的观看轨迹。`
-                  : '从第一部作品开始，写下属于自己的观看轨迹。'}
+              <div className="grid grid-cols-4 gap-2">
+                {covers.map((item) => (
+                  <img
+                    key={item.id}
+                    src={item.coverImage.large || item.coverImage.extraLarge}
+                    alt=""
+                    className="aspect-[3/4] w-full object-cover"
+                    loading="lazy"
+                  />
+                ))}
+              </div>
+              <p className="mt-6 border-l-2 border-yearbook-pink bg-rose-50/65 px-4 py-3 text-sm leading-6 text-yearbook-ink">
+                {positive.length
+                  ? t('portrait.themesPositive', {
+                      genres: positive.map((genre) => genreLabel(t, genre.key)).join(' / '),
+                    })
+                  : explored.length
+                    ? t('portrait.themesExplored', {
+                        genres: explored.map((genre) => genreLabel(t, genre.key)).join(' / '),
+                      })
+                    : t('portrait.noGenres')}
               </p>
             </div>
-          </div>
 
-          <aside className="border border-yearbook-line bg-yearbook-paper/55 p-5">
-            <div className="border-b border-yearbook-line pb-4">
-              <span className="block text-5xl font-medium text-yearbook-pink">{profile.score}</span>
-              <span className="mt-1 block text-xs text-yearbook-muted">二次元浓度</span>
-            </div>
-            <dl className="mt-4 space-y-3">
-              {(Object.keys(statusLabels) as UserAnimeStatus[]).map((status) => (
-                <div key={status} className="flex items-center justify-between text-sm">
-                  <dt className="text-yearbook-muted">{statusLabels[status]}</dt>
-                  <dd className="font-medium text-yearbook-ink">{statusCounts[status]}</dd>
-                </div>
-              ))}
-            </dl>
-            <div className="mt-5 flex flex-wrap gap-2 border-t border-yearbook-line pt-4">
-              {profile.labels.map((label) => (
-                <span
-                  key={label}
-                  title={profile.labelReasons[label]}
-                  className="border border-yearbook-line bg-white px-2 py-1 text-[11px] text-yearbook-muted"
-                >
-                  {label}
+            <aside className="border border-yearbook-line bg-yearbook-paper/55 p-5">
+              <div className="border-b border-yearbook-line pb-4">
+                <span className="block text-4xl font-medium text-yearbook-ink">{model.totals.watched}</span>
+                <span className="mt-1 block text-xs text-yearbook-muted">
+                  {t('portrait.watchedLabel', { count: model.totals.watched })}
                 </span>
-              ))}
-            </div>
-          </aside>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-yearbook-line bg-yearbook-paper/55 px-6 py-4 sm:px-8">
-          <span className="text-sm text-yearbook-muted">ChatGPT 绘图协作</span>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void copyPrompt()}
-              className="border border-yearbook-line bg-white px-3 py-2 text-sm font-medium text-yearbook-ink transition hover:border-sky-300 hover:bg-yearbook-blue"
-            >
-              {copyState === 'copied' ? 'Prompt 已复制' : copyState === 'error' ? '复制失败' : '复制绘图 Prompt'}
-            </button>
-            <button
-              type="button"
-              onClick={openChatGPT}
-              className="bg-yearbook-sky px-3 py-2 text-sm font-medium text-white transition hover:bg-sky-600"
-            >
-              打开 ChatGPT
-            </button>
+              </div>
+              <dl className="mt-4 space-y-3">
+                {PORTRAIT_STATUSES.map((status) => (
+                  <div key={status} className="flex items-center justify-between text-sm">
+                    <dt className="text-yearbook-muted">{t(statusKey(status))}</dt>
+                    <dd className="font-medium text-yearbook-ink">{statusCounts[status]}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-5 border-t border-yearbook-line pt-4 text-[11px] font-medium text-yearbook-muted">
+                {t('portrait.rangeCaption')}
+              </p>
+              <ul className="mt-2 space-y-2 text-xs leading-5 text-yearbook-ink">
+                <li>{eraText}</li>
+                <li>{t(popularityKey(popularity.lean))}</li>
+              </ul>
+            </aside>
           </div>
-        </div>
+        )}
+
+        {hasWatched && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-yearbook-line bg-yearbook-paper/55 px-6 py-4 sm:px-8">
+            <span className="text-sm text-yearbook-muted">{t('portrait.chatgptLabel')}</span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void copyPrompt()}
+                className="min-h-11 border border-yearbook-line bg-white px-3 text-sm font-medium text-yearbook-ink transition hover:border-sky-300 hover:bg-yearbook-blue"
+              >
+                {copyState === 'copied'
+                  ? t('portrait.promptCopied')
+                  : copyState === 'error'
+                    ? t('common.copyFailed')
+                    : t('portrait.copyPrompt')}
+              </button>
+              <button
+                type="button"
+                onClick={openChatGPT}
+                className="min-h-11 bg-yearbook-sky px-3 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong"
+              >
+                {t('portrait.openChatGPT')}
+              </button>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

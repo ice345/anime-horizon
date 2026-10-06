@@ -14,29 +14,26 @@ export const sessionAIConfigSchema = z.object({
       return (
         url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname))
       );
-    }, '个人模型地址必须使用 HTTPS（本机开发可使用 HTTP）'),
+    }, 'Personal endpoints must use HTTPS (HTTP is allowed for localhost)'),
   model: z.string().trim().min(1).max(128),
 });
 
 export type SessionAIConfig = z.infer<typeof sessionAIConfigSchema>;
 export type SessionAIProvider = z.infer<typeof sessionAIProviderSchema>;
 
-const analysisItemSchema = z
-  .object({
-    title: z.string().trim().max(200),
-    reason: z.string().trim().max(1_200),
-  })
-  .passthrough();
-
+/**
+ * AI reflection payload. Older or pasted reports may still contain `avoid` / `recommendations` title
+ * lists; they are accepted (passthrough) but ignored: anime recommendations come only from the
+ * deterministic For You engine (docs/recommendations.md).
+ */
 export const tasteAnalysisPayloadSchema = z
   .object({
     tags: z.array(z.string().trim().max(40)).max(12).optional().default([]),
     roast: z.string().max(6_000).optional(),
     analysis: z.string().max(6_000).optional(),
     personality: z.string().max(6_000).optional(),
-    avoid: z.union([z.array(analysisItemSchema).max(12), z.string().max(2_000)]).optional(),
     goldenEra: z.string().max(2_000).optional(),
-    recommendations: z.array(analysisItemSchema).max(20).optional().default([]),
+    questions: z.array(z.string().trim().max(400)).max(6).optional().default([]),
   })
   .passthrough();
 
@@ -44,26 +41,12 @@ export const normalizedTasteAnalysisSchema = z.object({
   tags: z.array(z.string().max(40)).length(6),
   roast: z.string().max(6_000),
   personality: z.string().max(6_000),
-  avoid: z.array(analysisItemSchema).length(3),
   goldenEra: z.string().max(2_000),
-  recommendations: z.array(analysisItemSchema).length(8),
+  /** Up to three open questions for the user to reflect on. */
+  questions: z.array(z.string().max(400)).max(3),
 });
 
 export type TasteAnalysisResult = z.infer<typeof normalizedTasteAnalysisSchema>;
-
-export const gameCharacterSchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  source: z.string().trim().min(1).max(200),
-  hint: z.string().trim().max(500),
-});
-export type GameCharacter = z.infer<typeof gameCharacterSchema>;
-
-export const emojiGameChallengeSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  emojis: z.string().trim().max(100),
-  hint: z.string().trim().max(500),
-});
-export type EmojiGameChallenge = z.infer<typeof emojiGameChallengeSchema>;
 
 export const chatCompletionResponseSchema = z
   .object({
@@ -78,10 +61,3 @@ export const chatCompletionResponseSchema = z
       .min(1),
   })
   .passthrough();
-
-export const oracleResponseSchema = z.object({
-  answer: z.enum(['YES', 'NO', 'UNKNOWN']).catch('UNKNOWN'),
-  flavorText: z.string().trim().max(200).catch('信号稳定，但答案仍在雾中。'),
-});
-
-export const gameWinResponseSchema = z.object({ correct: z.boolean() }).passthrough();

@@ -1,11 +1,12 @@
 import {
-  anilistPagePayloadSchema,
-  anilistRecommendationPayloadSchema,
-  AnilistRecommendationMedia,
+  anilistEnvelopeSchema,
+  collectValid,
   normalizeAnimeRecord,
   parseAnimeList,
+  recommendationNodeSchema,
 } from '../shared/schemas/anime';
-import { Anime, Season, UserAnimeReaction } from '../types';
+import { z } from 'zod';
+import { Anime, Season } from '../types';
 
 const API_URL = 'https://graphql.anilist.co';
 type DataMode = 'remote' | 'local' | 'local-strict';
@@ -23,6 +24,14 @@ const CONFIG = {
   CACHE_MAX_ENTRIES: 120,
 };
 
+/**
+ * A season is loaded as a whole: membership is decided only by season/year/format filters,
+ * never by score, so unscored new titles and the long tail stay discoverable. Pages are read
+ * sequentially (a season is typically 1–2 pages) and capped to bound the request count.
+ */
+export const SEASON_PAGE_SIZE = 50;
+export const MAX_SEASON_PAGES = 6;
+
 interface CacheEntry {
   data: Anime[];
   expiresAt: number;
@@ -30,6 +39,19 @@ interface CacheEntry {
 
 const animeCache = new Map<string, CacheEntry>();
 const inFlightRequests = new Map<string, Promise<Anime[]>>();
+
+/** Catalogue failure that the UI can explain; translated as `feedback.<code>`. */
+export class CatalogueError extends Error {
+  readonly code: 'strictLocalMissing';
+  readonly year: number;
+
+  constructor(year: number, options?: { cause?: unknown }) {
+    super(`Strict local mode has no data for ${year}`, options);
+    this.name = 'CatalogueError';
+    this.code = 'strictLocalMissing';
+    this.year = year;
+  }
+}
 
 class NonRetryableAniListError extends Error {
   constructor(message: string) {
@@ -48,7 +70,7 @@ query ($year: Int, $season: MediaSeason, $page: Int, $perPage: Int) {
       type: ANIME
       countryOfOrigin: JP
       isAdult: false
-      sort: [SCORE_DESC, POPULARITY_DESC]
+      sort: [POPULARITY_DESC, ID]
       format_in: [TV,TV_SHORT, MOVIE, OVA, ONA]
     ) {
       id
@@ -131,6 +153,7 @@ query ($ids: [Int]) {
             episodes
             duration
             studios(isMain: true) { nodes { name } }
+            relations { edges { relationType node { id } } }
           }
         }
       }
@@ -182,10 +205,8 @@ async function fetchWithRetry(
       throw new Error(`AniList API error: ${response.status}`);
     }
     const json: unknown = await response.json();
-    const parsed =
-      query === ARCHIVE_RECOMMENDATION_QUERY
-        ? anilistRecommendationPayloadSchema.safeParse(json)
-        : anilistPagePayloadSchema.safeParse(json);
+    // Only the envelope is validated here; items are validated one by one by the readers.
+    const parsed = anilistEnvelopeSchema.safeParse(json);
     if (!parsed.success) throw new NonRetryableAniListError('AniList response schema validation failed');
     if (parsed.data.errors?.length) throw new NonRetryableAniListError('AniList GraphQL request failed');
     return parsed.data;
@@ -198,10 +219,31 @@ async function fetchWithRetry(
   }
 }
 
-const readPageMedia = (payload: unknown): Anime[] => {
-  const parsed = anilistPagePayloadSchema.parse(payload);
-  return (parsed.data?.Page?.media || []).map(normalizeAnimeRecord);
+/** Nothing usable at all is schema drift, not a partial page: fail instead of showing an empty result. */
+const requireSomeValid = <T>(result: { valid: T[]; rejected: number }) => {
+  if (!result.valid.length && result.rejected > 0) {
+    throw new NonRetryableAniListError('AniList response schema validation failed');
+  }
+  return result;
 };
+
+const warnRejected = (what: string, rejected: number) => {
+  if (!rejected) return;
+  // eslint-disable-next-line no-console -- diagnostic for partially malformed AniList responses
+  console.warn(`[AniList] Skipped ${rejected} malformed ${what}.`);
+};
+
+/** Season page records; a malformed record is skipped and counted, its valid siblings are kept. */
+export const readPageMedia = (payload: unknown): Anime[] => {
+  const { valid, rejected } = requireSomeValid(
+    collectValid(anilistEnvelopeSchema.parse(payload).data?.Page?.media || [], (item) => normalizeAnimeRecord(item))
+  );
+  warnRejected('catalogue record(s)', rejected);
+  return valid;
+};
+
+const readHasNextPage = (payload: unknown) =>
+  Boolean(anilistEnvelopeSchema.parse(payload).data?.Page?.pageInfo?.hasNextPage);
 
 const getCached = (key: string) => {
   const entry = animeCache.get(key);
@@ -224,50 +266,43 @@ const setCached = (key: string, data: Anime[]) => {
 export const buildAnimeCacheKey = (kind: 'season' | 'search', ...parts: Array<string | number>) =>
   `${kind}:${DATA_MODE}:${parts.join(':')}`;
 
-async function fetchLocalBySeason(
-  year: number,
-  season: Season,
-  perSeason: number,
-  signal?: AbortSignal
-): Promise<Anime[]> {
+async function fetchLocalBySeason(year: number, season: Season, signal?: AbortSignal): Promise<Anime[]> {
   try {
     const res = await fetch(`${LOCAL_DATA_BASE}/anime-${year}.json`, { signal });
     if (!res.ok) throw new Error(`Local data missing for ${year}`);
     const data: unknown = await res.json();
-    return parseAnimeList(data)
-      .filter((anime) => anime.season === season)
-      .slice(0, perSeason);
+    return parseAnimeList(data).filter((anime) => anime.season === season);
   } catch (error) {
     if (signal?.aborted) throw error;
-    if (DATA_MODE === 'local-strict') throw new Error(`严格本地模式缺少 ${year} 年数据`, { cause: error });
-    return fetchRemoteBySeason(year, season, perSeason, signal);
+    if (DATA_MODE === 'local-strict') throw new CatalogueError(year, { cause: error });
+    return fetchRemoteBySeason(year, season, signal);
   }
 }
 
-async function fetchRemoteBySeason(
-  year: number,
-  season: Season,
-  perSeason: number,
-  signal?: AbortSignal
-): Promise<Anime[]> {
-  const payload = await fetchWithRetry({ year, season, page: 1, perPage: perSeason }, 0, QUERY, signal);
-  return readPageMedia(payload);
+async function fetchRemoteBySeason(year: number, season: Season, signal?: AbortSignal): Promise<Anime[]> {
+  const seen = new Set<string>();
+  const anime: Anime[] = [];
+  for (let page = 1; page <= MAX_SEASON_PAGES; page += 1) {
+    const payload = await fetchWithRetry({ year, season, page, perPage: SEASON_PAGE_SIZE }, 0, QUERY, signal);
+    readPageMedia(payload).forEach((item) => {
+      if (seen.has(item.id)) return;
+      seen.add(item.id);
+      anime.push(item);
+    });
+    if (!readHasNextPage(payload)) break;
+  }
+  return anime;
 }
 
-export const fetchAnimeBySeason = async (
-  year: number,
-  season: Season,
-  perSeason: number = 20,
-  signal?: AbortSignal
-): Promise<Anime[]> => {
-  const cacheKey = buildAnimeCacheKey('season', year, season, perSeason);
+export const fetchAnimeBySeason = async (year: number, season: Season, signal?: AbortSignal): Promise<Anime[]> => {
+  const cacheKey = buildAnimeCacheKey('season', year, season);
   const cached = getCached(cacheKey);
   if (cached) return cached;
   const pending = inFlightRequests.get(cacheKey);
   if (pending) return pending;
 
   const loader = DATA_MODE === 'remote' ? fetchRemoteBySeason : fetchLocalBySeason;
-  const request = loader(year, season, perSeason, signal)
+  const request = loader(year, season, signal)
     .then((data) => {
       setCached(cacheKey, data);
       return data;
@@ -279,13 +314,9 @@ export const fetchAnimeBySeason = async (
   return request;
 };
 
-export const fetchAnimeByYear = async (
-  year: number,
-  perSeason: number = 20,
-  signal?: AbortSignal
-): Promise<Anime[]> => {
+export const fetchAnimeByYear = async (year: number, signal?: AbortSignal): Promise<Anime[]> => {
   const seasons: Season[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
-  const results = await Promise.all(seasons.map((season) => fetchAnimeBySeason(year, season, perSeason, signal)));
+  const results = await Promise.all(seasons.map((season) => fetchAnimeBySeason(year, season, signal)));
   return results.flat();
 };
 
@@ -321,7 +352,7 @@ export const searchAnime = async (
           setCached(cacheKey, entries);
           return entries;
         }
-        if (DATA_MODE === 'local-strict') throw new Error(`严格本地模式缺少 ${year} 年数据`);
+        if (DATA_MODE === 'local-strict') throw new CatalogueError(year);
       } catch (error) {
         if (signal?.aborted || DATA_MODE === 'local-strict') throw error;
       }
@@ -343,57 +374,49 @@ export const searchAnime = async (
   return request;
 };
 
-export interface ArchiveRecommendation {
+/** Prequel/parent relations of a candidate, used to avoid recommending a later entry out of context. */
+const relationEdgesSchema = z
+  .object({
+    edges: z
+      .array(
+        z
+          .object({
+            relationType: z.string().max(40).nullish(),
+            node: z.object({ id: z.coerce.number().int().positive() }).passthrough().nullish(),
+          })
+          .passthrough()
+      )
+      .max(100)
+      .nullish(),
+  })
+  .passthrough()
+  .nullish();
+
+const CONTINUATION_RELATIONS = new Set(['PREQUEL', 'PARENT']);
+
+/** One AniList "users also recommend" edge from a source title in the archive to a candidate. */
+export interface RecommendationGraphLink {
+  /** AniList community vote count for this recommendation edge. */
+  rating: number;
   anime: Anime;
-  reason: string;
+  /** IDs this candidate continues (its PREQUEL / PARENT relations). */
+  continues: string[];
 }
 
-const sourceAffinity: Record<UserAnimeReaction, number> = {
-  LOVE: 1.25,
-  LIKE: 1.08,
-  NEUTRAL: 0.76,
-  DISLIKE: 0.3,
-  HATE: 0,
-};
+export interface RecommendationGraphNode {
+  sourceId: string;
+  links: RecommendationGraphLink[];
+}
 
-const normalizeReaction = (reaction?: UserAnimeReaction): UserAnimeReaction =>
-  reaction === 'LOVE' || reaction === 'LIKE' || reaction === 'DISLIKE' || reaction === 'HATE' ? reaction : 'NEUTRAL';
+export interface RecommendationGraph {
+  nodes: RecommendationGraphNode[];
+  /** True when at least one batch failed; such a graph is never cached. */
+  incomplete: boolean;
+  /** Malformed sources or edges that were skipped (their valid siblings are kept). */
+  rejected?: number;
+}
 
-const recommendationSourceWeight = (anime: Anime) => {
-  const statusWeight = { PLAN: 0, WATCHING: 2, COMPLETED: 3 }[anime.userStatus || 'PLAN'];
-  const reactionWeight = { LOVE: 4, LIKE: 3, NEUTRAL: 0, DISLIKE: 1, HATE: 0 }[normalizeReaction(anime.userReaction)];
-  const reviewWeight = anime.userNote?.trim() ? 5 : 0;
-  return statusWeight + reactionWeight + reviewWeight;
-};
-
-const selectRecommendationSourceIds = (archive: Anime[]) => {
-  const ranked = archive
-    .map((item, index) => ({ item, index, weight: recommendationSourceWeight(item) }))
-    .sort(
-      (left, right) =>
-        right.weight - left.weight || right.item.seasonYear - left.item.seasonYear || left.index - right.index
-    );
-  const selected: Anime[] = [];
-  const selectedIds = new Set<string>();
-  const coveredYears = new Set<number>();
-
-  // Keep older years represented even when a user has a large, recent archive.
-  for (const candidate of ranked) {
-    if (selected.length >= MAX_ARCHIVE_RECOMMENDATION_SOURCES) break;
-    if (coveredYears.has(candidate.item.seasonYear)) continue;
-    coveredYears.add(candidate.item.seasonYear);
-    selected.push(candidate.item);
-    selectedIds.add(String(candidate.item.id));
-  }
-  for (const candidate of ranked) {
-    if (selected.length >= MAX_ARCHIVE_RECOMMENDATION_SOURCES) break;
-    if (selectedIds.has(String(candidate.item.id))) continue;
-    selected.push(candidate.item);
-    selectedIds.add(String(candidate.item.id));
-  }
-
-  return Array.from(new Set(selected.map((item) => Number(item.id)).filter(Number.isFinite)));
-};
+const graphCache = new Map<string, { graph: RecommendationGraph; expiresAt: number }>();
 
 const splitIntoBatches = <T>(items: T[], size: number) => {
   const batches: T[][] = [];
@@ -401,108 +424,96 @@ const splitIntoBatches = <T>(items: T[], size: number) => {
   return batches;
 };
 
-export const fetchArchiveRecommendations = async (
-  archive: Anime[],
-  limit: number = 12
-): Promise<ArchiveRecommendation[]> => {
-  const ids = selectRecommendationSourceIds(archive);
-  if (!ids.length) return [];
+const graphSourceSchema = z
+  .object({
+    id: z.coerce.number().int().positive(),
+    recommendations: z
+      .object({ nodes: z.array(z.unknown()).max(100) })
+      .passthrough()
+      .nullish(),
+  })
+  .passthrough();
 
-  const batches = splitIntoBatches(ids, ARCHIVE_RECOMMENDATION_BATCH_SIZE);
-  const settled = await Promise.allSettled(
-    batches.map((batch) => fetchWithRetry({ ids: batch }, 0, ARCHIVE_RECOMMENDATION_QUERY))
+const readGraphLink = (value: unknown): RecommendationGraphLink | null => {
+  const node = recommendationNodeSchema.parse(value);
+  // Skip edges the AniList community has voted down (net rating below zero).
+  if (!node.mediaRecommendation || (node.rating ?? 0) < 0) return null;
+  const relations = relationEdgesSchema.safeParse((node.mediaRecommendation as { relations?: unknown }).relations);
+  const continues = relations.success
+    ? (relations.data?.edges || [])
+        .filter((edge) => edge.node && CONTINUATION_RELATIONS.has(edge.relationType || ''))
+        .map((edge) => String(edge.node!.id))
+    : [];
+  return { rating: node.rating || 0, anime: normalizeAnimeRecord(node.mediaRecommendation), continues };
+};
+
+/**
+ * Graph nodes from one response. A malformed source or edge is skipped and counted; its valid siblings
+ * are kept (before B4, one bad edge failed all 20 sources in the request).
+ */
+export const readGraphNodes = (payload: unknown): { nodes: RecommendationGraphNode[]; rejected: number } => {
+  const sources = requireSomeValid(
+    collectValid(anilistEnvelopeSchema.parse(payload).data?.Page?.media || [], (item) => graphSourceSchema.parse(item))
   );
-  const successfulPayloads = settled
-    .filter((result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled')
+  let rejected = sources.rejected;
+  const nodes = sources.valid.map((media) => {
+    const links = collectValid(media.recommendations?.nodes || [], readGraphLink);
+    rejected += links.rejected;
+    return {
+      sourceId: String(media.id),
+      links: links.valid.filter((link): link is RecommendationGraphLink => link !== null),
+    };
+  });
+  return { nodes, rejected };
+};
+
+/**
+ * Fetches AniList recommendation edges for the given source titles. This is candidate data only:
+ * it does no ranking. Source IDs are sorted and de-duplicated so the same set always produces the
+ * same requests, nodes are returned in source-ID order, and complete results are cached, so reopening
+ * recommendations with unchanged sources reuses exactly the same graph.
+ */
+export const fetchRecommendationGraph = async (
+  sourceIds: string[],
+  signal?: AbortSignal
+): Promise<RecommendationGraph> => {
+  const ids = Array.from(new Set(sourceIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))).sort(
+    (left, right) => left - right
+  );
+  if (!ids.length) return { nodes: [], incomplete: false };
+  const key = ids.join(',');
+  const cached = graphCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.graph;
+
+  const settled = await Promise.allSettled(
+    splitIntoBatches(ids, ARCHIVE_RECOMMENDATION_BATCH_SIZE).map((batch) =>
+      fetchWithRetry({ ids: batch }, 0, ARCHIVE_RECOMMENDATION_QUERY, signal).then(readGraphNodes)
+    )
+  );
+  if (signal?.aborted) throw new DOMException('The request was aborted', 'AbortError');
+  const read = settled
+    .filter(
+      (result): result is PromiseFulfilledResult<ReturnType<typeof readGraphNodes>> => result.status === 'fulfilled'
+    )
     .map((result) => result.value);
-  if (!successfulPayloads.length) {
+  if (!read.length) {
     const firstFailure = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     throw firstFailure?.reason instanceof Error
       ? firstFailure.reason
       : new Error('AniList recommendation request failed');
   }
-  const data = successfulPayloads.flatMap(
-    (payload) => anilistRecommendationPayloadSchema.parse(payload).data?.Page?.media || []
-  );
-  const selectedIds = new Set(archive.map((item) => String(item.id)));
-  const archiveById = new Map(archive.map((item) => [String(item.id), item]));
-  const preferredGenreWeights = new Map<string, number>();
-  const avoidedGenreWeights = new Map<string, number>();
-  archive.forEach((item) => {
-    const reaction = normalizeReaction(item.userReaction);
-    const target =
-      reaction === 'LOVE' || reaction === 'LIKE'
-        ? preferredGenreWeights
-        : reaction === 'DISLIKE' || reaction === 'HATE'
-          ? avoidedGenreWeights
-          : null;
-    if (!target) return;
-    const weight = reaction === 'LOVE' || reaction === 'HATE' ? 1.35 : 1;
-    (item.genres || []).forEach((genre) => target.set(genre, (target.get(genre) || 0) + weight));
-  });
-  const archiveGenres = new Set(archive.flatMap((item) => item.genres || []));
-  const candidates = new Map<
-    string,
-    { anime: Anime; score: number; sharedGenres: string[]; sourceTitles: string[]; preferredSources: string[] }
-  >();
-
-  data.forEach((source: AnilistRecommendationMedia) => {
-    const sourceTitle = source.title?.native || source.title?.romaji || '年鉴作品';
-    const sourceArchiveItem = archiveById.get(String(source.id));
-    const sourceReaction = normalizeReaction(sourceArchiveItem?.userReaction);
-    const affinity = sourceAffinity[sourceReaction];
-    if (affinity === 0) return;
-    (source.recommendations?.nodes || []).forEach((node) => {
-      if (!node.mediaRecommendation) return;
-      const candidate = normalizeAnimeRecord(node.mediaRecommendation);
-      if (selectedIds.has(candidate.id)) return;
-      const sharedGenres = (candidate.genres || []).filter((genre) => archiveGenres.has(genre));
-      const preferredMatch = (candidate.genres || []).reduce(
-        (sum, genre) => sum + (preferredGenreWeights.get(genre) || 0),
-        0
-      );
-      const avoidedMatch = (candidate.genres || []).reduce(
-        (sum, genre) => sum + (avoidedGenreWeights.get(genre) || 0),
-        0
-      );
-      const score =
-        (node.rating || 0) * affinity +
-        sharedGenres.length * 12 +
-        preferredMatch * 10 -
-        avoidedMatch * 8 +
-        (candidate.averageScore || 0) * 0.18 +
-        Math.min(10, Math.log1p(candidate.popularity || 0));
-      const current = candidates.get(candidate.id);
-      if (current) {
-        current.score += score;
-        current.sharedGenres = Array.from(new Set([...current.sharedGenres, ...sharedGenres]));
-        if (!current.sourceTitles.includes(sourceTitle)) current.sourceTitles.push(sourceTitle);
-        if ((sourceReaction === 'LOVE' || sourceReaction === 'LIKE') && !current.preferredSources.includes(sourceTitle))
-          current.preferredSources.push(sourceTitle);
-      } else {
-        candidates.set(candidate.id, {
-          anime: candidate,
-          score,
-          sharedGenres,
-          sourceTitles: [sourceTitle],
-          preferredSources: sourceReaction === 'LOVE' || sourceReaction === 'LIKE' ? [sourceTitle] : [],
-        });
-      }
-    });
-  });
-
-  return Array.from(candidates.values())
-    .sort((left, right) => right.score - left.score)
-    .slice(0, limit)
-    .map(({ anime, sharedGenres, sourceTitles, preferredSources }) => ({
-      anime,
-      reason: sharedGenres.length
-        ? `${preferredSources.length ? `延续你喜欢的《${preferredSources[0]}》` : `延续《${sourceTitles[0]}》`}里的 ${sharedGenres.slice(0, 2).join(' / ')} 取向，并回避你标记不喜欢的方向。`
-        : `来自《${sourceTitles[0]}》的 AniList 关联推荐，并按口碑与人气重新排序。`,
-    }));
+  const rejected = read.reduce((sum, item) => sum + item.rejected, 0);
+  warnRejected('recommendation source(s) or edge(s)', rejected);
+  const nodes = read
+    .flatMap((item) => item.nodes)
+    .sort((left, right) => Number(left.sourceId) - Number(right.sourceId));
+  const graph = { nodes, incomplete: read.length < settled.length, rejected };
+  if (!graph.incomplete) graphCache.set(key, { graph, expiresAt: Date.now() + CONFIG.CACHE_TTL });
+  return graph;
 };
 
 export const clearAnimeCache = () => {
   animeCache.clear();
+  graphCache.clear();
   inFlightRequests.clear();
 };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { getDefaultArchiveStatus } from '../services/archiveStatus';
+import { createArchiveEntry } from '../features/archive/archiveOperations';
+import { DEFAULT_ARCHIVE_STATUS } from '../services/archiveStatus';
 import { Anime } from '../types';
 
 const anime = (overrides: Partial<Anime> = {}): Anime => ({
@@ -12,22 +13,28 @@ const anime = (overrides: Partial<Anime> = {}): Anime => ({
   ...overrides,
 });
 
-describe('default archive status', () => {
-  const now = new Date(2026, 7, 1);
-
-  it('marks previous years and seasons as completed', () => {
-    expect(getDefaultArchiveStatus(anime({ seasonYear: 2025 }), now)).toBe('COMPLETED');
-    expect(getDefaultArchiveStatus(anime({ season: 'SPRING' }), now)).toBe('COMPLETED');
+describe('archive status on add', () => {
+  it('keeps the archive default as PLAN', () => {
+    expect(DEFAULT_ARCHIVE_STATUS).toBe('PLAN');
   });
 
-  it('marks the current season as watching unless AniList says it has not started or finished', () => {
-    expect(getDefaultArchiveStatus(anime(), now)).toBe('WATCHING');
-    expect(getDefaultArchiveStatus(anime({ status: 'NOT_YET_RELEASED' }), now)).toBe('PLAN');
-    expect(getDefaultArchiveStatus(anime({ status: 'FINISHED' }), now)).toBe('COMPLETED');
+  it('adds an anime that finished airing years ago as PLAN, not COMPLETED', () => {
+    const entry = createArchiveEntry(anime({ seasonYear: 2006, season: 'SPRING', status: 'FINISHED' }));
+
+    expect(entry.userStatus).toBe('PLAN');
   });
 
-  it('keeps future seasons in the plan state', () => {
-    expect(getDefaultArchiveStatus(anime({ season: 'FALL' }), now)).toBe('PLAN');
-    expect(getDefaultArchiveStatus(anime({ seasonYear: 2027 }), now)).toBe('PLAN');
+  it('adds a currently airing anime as PLAN, not WATCHING', () => {
+    expect(createArchiveEntry(anime({ status: 'RELEASING' })).userStatus).toBe('PLAN');
+  });
+
+  it('ignores any status carried over from catalogue data', () => {
+    const entry = createArchiveEntry(
+      anime({ userStatus: 'COMPLETED', userReaction: 'LOVE', userNote: 'not the user’s note' })
+    );
+
+    expect(entry).toMatchObject({ userStatus: 'PLAN', userNote: undefined });
+    // A new entry has no reaction yet; it is not "okay" by default.
+    expect(entry.userReaction).toBeUndefined();
   });
 });

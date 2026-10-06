@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Anime, Season, UserAnimeReaction, UserAnimeStatus } from '../../types';
+import { normalizeUserHistory } from './history';
 
 export const seasonSchema = z.enum(['WINTER', 'SPRING', 'SUMMER', 'FALL']);
 export const userAnimeStatusSchema = z.enum(['PLAN', 'WATCHING', 'COMPLETED']);
@@ -18,7 +19,7 @@ export const animeRecordSchema = z
     id: z
       .union([z.string().trim().min(1).max(32), z.number().int().positive().max(2_000_000_000)])
       .transform(String)
-      .refine((value) => /^\d{1,32}$/.test(value), '作品 ID 必须是数字'),
+      .refine((value) => /^\d{1,32}$/.test(value), 'Anime IDs must be numeric'),
     title: z
       .object({
         romaji: boundedString(255).nullish(),
@@ -61,62 +62,20 @@ export const animeRecordSchema = z
     userStatus: userAnimeStatusSchema.nullish(),
     userReaction: userAnimeReactionSchema.nullish(),
     userNote: boundedString(280).nullish(),
+    // Validated field by field in normalizeUserHistory so one bad date never discards a record.
+    userHistory: z.unknown().optional(),
   })
   .passthrough();
 
 export type AnimeRecord = z.infer<typeof animeRecordSchema>;
 
-const recommendationNodeSchema = z
+export const recommendationNodeSchema = z
   .object({
-    rating: optionalNumber(z.coerce.number().int().min(0)),
+    // Net community votes; AniList returns negative values for down-voted recommendations.
+    rating: optionalNumber(z.coerce.number().int()),
     mediaRecommendation: animeRecordSchema.nullish(),
   })
   .passthrough();
-
-const recommendationMediaSchema = animeRecordSchema.extend({
-  recommendations: z
-    .object({
-      nodes: z.array(recommendationNodeSchema).max(100),
-    })
-    .passthrough()
-    .nullish(),
-});
-
-const pageSchema = <T extends z.ZodType>(mediaSchema: T) =>
-  z
-    .object({
-      media: z.array(mediaSchema).max(100).nullish(),
-    })
-    .passthrough();
-
-export const anilistPagePayloadSchema = z
-  .object({
-    data: z
-      .object({ Page: pageSchema(animeRecordSchema).nullish() })
-      .passthrough()
-      .nullish(),
-    errors: z
-      .array(z.object({ message: boundedString(500).nullish() }).passthrough())
-      .max(20)
-      .nullish(),
-  })
-  .passthrough();
-
-export const anilistRecommendationPayloadSchema = z
-  .object({
-    data: z
-      .object({ Page: pageSchema(recommendationMediaSchema).nullish() })
-      .passthrough()
-      .nullish(),
-    errors: z
-      .array(z.object({ message: boundedString(500).nullish() }).passthrough())
-      .max(20)
-      .nullish(),
-  })
-  .passthrough();
-
-export type AnilistMedia = z.infer<typeof animeRecordSchema>;
-export type AnilistRecommendationMedia = z.infer<typeof recommendationMediaSchema>;
 
 const asTitle = (title: AnimeRecord['title']) => ({
   romaji: title?.romaji || '',
@@ -141,9 +100,10 @@ export const normalizeAnimeRecord = (value: unknown): Anime => {
   const userStatus: UserAnimeStatus = userAnimeStatusSchema.safeParse(record.userStatus).success
     ? (record.userStatus as UserAnimeStatus)
     : 'PLAN';
-  const userReaction: UserAnimeReaction = userAnimeReactionSchema.safeParse(record.userReaction).success
+  // A missing reaction stays missing: "no reaction recorded" is not the same as an explicit NEUTRAL.
+  const userReaction: UserAnimeReaction | undefined = userAnimeReactionSchema.safeParse(record.userReaction).success
     ? (record.userReaction as UserAnimeReaction)
-    : 'NEUTRAL';
+    : undefined;
 
   return {
     id: record.id,
@@ -163,12 +123,55 @@ export const normalizeAnimeRecord = (value: unknown): Anime => {
     studios: asStudios(record.studios),
     nextAiringEpisode: record.nextAiringEpisode || undefined,
     userStatus,
-    userReaction,
+    ...(userReaction ? { userReaction } : {}),
     userNote: record.userNote?.trim() || undefined,
+    // Catalogue records have no history; archive records always carry one (see normalizeArchiveEntry).
+    ...(record.userHistory !== undefined && record.userHistory !== null
+      ? { userHistory: normalizeUserHistory(record.userHistory) }
+      : {}),
   };
 };
 
 export const parseAnimeList = (value: unknown): Anime[] => {
   const records = z.array(animeRecordSchema).max(5_000).parse(value);
   return records.map(normalizeAnimeRecord);
+};
+
+/**
+ * AniList response envelope with items left unvalidated. Network responses are validated item by
+ * item (see `collectValid`), so one malformed record or edge can't discard an otherwise usable page.
+ */
+export const anilistEnvelopeSchema = z
+  .object({
+    data: z
+      .object({
+        Page: z
+          .object({
+            pageInfo: z.object({ hasNextPage: z.boolean().nullish() }).passthrough().nullish(),
+            media: z.array(z.unknown()).max(100).nullish(),
+          })
+          .passthrough()
+          .nullish(),
+      })
+      .passthrough()
+      .nullish(),
+    errors: z
+      .array(z.object({ message: boundedString(500).nullish() }).passthrough())
+      .max(20)
+      .nullish(),
+  })
+  .passthrough();
+
+/** Keeps the items that pass `parse` and counts the rest. */
+export const collectValid = <T>(items: unknown[], parse: (item: unknown) => T): { valid: T[]; rejected: number } => {
+  const valid: T[] = [];
+  let rejected = 0;
+  items.forEach((item) => {
+    try {
+      valid.push(parse(item));
+    } catch {
+      rejected += 1;
+    }
+  });
+  return { valid, rejected };
 };

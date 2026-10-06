@@ -14,9 +14,13 @@
   --color-yearbook-surface: var(--ah-surface);
   --color-yearbook-blue: var(--ah-surface-blue);
   --color-yearbook-sky: var(--ah-primary);
+  --color-yearbook-sky-strong: var(--ah-primary-strong);
+  --color-yearbook-tint: var(--ah-sky-tint);
   --color-yearbook-ink: var(--ah-ink);
   --color-yearbook-muted: var(--ah-muted);
   --color-yearbook-pink: var(--ah-pink);
+  --color-yearbook-rose: var(--ah-rose);
+  --color-yearbook-rose-strong: var(--ah-rose-strong);
   --color-yearbook-line: var(--ah-border);
 
   --animate-float: float 6s ease-in-out infinite;
@@ -44,4 +48,15 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Japanese text needs Japanese glyph forms; the default stack prefers Noto Sans SC (Chinese forms). */
+html:lang(ja) .font-sans,
+[lang='ja']:not(html) {
+  font-family: 'Outfit', 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', sans-serif;
+}
+
+/* Likewise, keep Simplified Chinese glyph forms for zh-CN text shown inside another UI language. */
+[lang='zh-CN']:not(html) {
+  font-family: 'Outfit', 'Noto Sans SC', sans-serif;
 }

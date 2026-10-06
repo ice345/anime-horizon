@@ -1,5 +1,8 @@
 # 数据模型
 
+> **核心不变量：作品的播出时间与用户的观看时间是两个独立的领域。**
+> `season`、`seasonYear`、`status`（播出状态）等 AniList 元数据只描述作品；用户何时收录、开始看、看完只来自用户自己的操作或输入。系统永远不会根据播出时间推断观看记录，也不会为未知的历史编造日期。
+
 ## 外部目录 DTO
 
 AniList GraphQL 返回值只允许通过 `shared/schemas/anime.ts` 进入应用。schema 对 ID、标题、图片 URL、描述、评分、人气、题材、工作室、季度和推荐节点设置长度/数量范围，并拒绝无法识别的 ID。
@@ -8,13 +11,82 @@ AniList GraphQL 返回值只允许通过 `shared/schemas/anime.ts` 进入应用�
 
 `types.ts` 中的 `Anime` 是 UI、缓存和年鉴共用的归一化模型：
 
-| 字段组     | 字段                                                                                    | 来源/规则                                                    |
-| ---------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 标识       | `id`                                                                                    | AniList 数字 ID，应用内统一为字符串。                        |
-| 作品信息   | `title`、`coverImage`、`bannerImage`、`description`、`genres`、`studios`                | 外部目录，经 normalizer 填充空值为安全默认值。               |
-| 播出元数据 | `season`、`seasonYear`、`format`、`status`、`episodes`、`duration`、`nextAiringEpisode` | AniList 字段；缺失值保持 undefined 或安全默认季度/年份。     |
-| 统计       | `averageScore`、`popularity`                                                            | 只接受范围内整数。                                           |
-| 本地字段   | `userStatus`、`userReaction`、`userNote`                                                | 仅来自用户操作或备份，不由 AniList 决定；短评最多 280 字符。 |
+| 字段组     | 字段                                                                                    | 来源/规则                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 标识       | `id`                                                                                    | AniList 数字 ID，应用内统一为字符串。                                                                                  |
+| 作品信息   | `title`、`coverImage`、`bannerImage`、`description`、`genres`、`studios`                | 外部目录，经 normalizer 填充空值为安全默认值。                                                                         |
+| 播出元数据 | `season`、`seasonYear`、`format`、`status`、`episodes`、`duration`、`nextAiringEpisode` | AniList 字段；缺失值保持 undefined 或安全默认季度/年份。                                                               |
+| 统计       | `averageScore`、`popularity`                                                            | 只接受范围内整数。                                                                                                     |
+| 本地字段   | `userStatus`、`userReaction`、`userNote`、`userHistory`                                 | 仅来自用户操作或备份，不由 AniList 决定；短评最多 280 字符；缺少 `userReaction` 表示没有标记感受（不等于 `NEUTRAL`）。 |
+
+### 观看状态不变量
+
+`userStatus` 与 AniList 的 `status`（播出状态）、`season`、`seasonYear` 是两个独立领域。新收录作品一律为 `PLAN`，即使它在多年前已经完结；只有用户在年鉴中主动修改，才会变为 `WATCHING` 或 `COMPLETED`。本地存储或备份中缺少状态的条目也迁移为 `PLAN`，不按播出时间推断。实现见 `services/archiveStatus.ts` 与 `features/archive/archiveOperations.ts#createArchiveEntry`。
+
+## 个人观看历史 `userHistory`
+
+每条年鉴记录都带有 `userHistory`（`shared/schemas/history.ts`）：
+
+| 字段          | 含义                           | 由谁写入                                  |
+| ------------- | ------------------------------ | ----------------------------------------- |
+| `addedAt`     | 作品进入年鉴的时间             | 新增时自动记录                            |
+| `startedAt`   | （第一次）开始观看的时间       | 状态变为 WATCHING 时自动记录，或用户填写  |
+| `completedAt` | （第一次）看完的时间           | 状态变为 COMPLETED 时自动记录，或用户填写 |
+| `updatedAt`   | 任一用户字段最后一次变更的时间 | 每次真实变更时自动记录                    |
+
+### 时间表示
+
+所有值都是与语言无关的 ISO 8601 字符串，字符串的形态就是精度，`null` 表示未知：
+
+- 时刻 `2026-10-05T09:30:12.345Z`：应用自动记录，统一为 UTC。`updatedAt` 只接受这种形态。
+- 日 `2019-06-15`、月 `2019-06`、年 `2019`：用户补录，允许“我是 2019 年看的”这类不精确的记忆，不强行补成某月某日。
+
+界面按当前语言格式化（`shared/i18n/dates.ts`），只显示值实际具有的精度；日期型值不会因时区偏移而变成前一天或后一天。存储中从不保存本地化字符串。
+
+### 状态变更语义（`features/archive/archiveOperations.ts`）
+
+| 操作                           | 历史变化                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| 新增作品                       | 状态 `PLAN`；`addedAt = updatedAt = 现在`；`startedAt`、`completedAt` 为未知     |
+| 选择与当前相同的状态           | 无任何变化                                                                       |
+| → WATCHING                     | `updatedAt = 现在`；仅当开始与看完时间都未知时 `startedAt = 现在`                |
+| → COMPLETED                    | `updatedAt = 现在`；仅当 `completedAt` 未知时 `completedAt = 现在`；不补开始时间 |
+| → PLAN 或其他回退              | 只更新 `updatedAt`，从不清除已知日期                                             |
+| 保存点评面板（感受/短评/日期） | 有实际变化时才更新 `updatedAt`；用户填写的日期原样保存，之后不会被状态变更覆盖   |
+| 移出后撤销                     | 恢复移出前的完整记录，包括全部历史                                               |
+
+存在歧义、目前选择“保留历史而不臆测”的情况：
+
+- **COMPLETED → WATCHING（可能是重看）**：保留第一次的 `completedAt`，不把现在写成 `startedAt`（否则开始时间会晚于看完时间，并被误读为第一次观看）。
+- **再次 COMPLETED**：不覆盖第一次看完时间；第二次看完的时间目前不记录。重看需要 `statusHistory` 或重看计数，留待后续阶段。
+- **PLAN → COMPLETED**：只记录看完时间，开始时间保持未知。
+- **用户填写的日期与状态不一致**（例如状态为 PLAN 却有看完时间）：允许，按用户陈述保存；可能表示以前看过、计划重看。
+- 用户可以把日期清空回“未知”；`addedAt` 只读，因为它记录的是收录这一系统事实。
+
+## 观看历程的派生规则
+
+观看历程（`/journey`）不存储任何新数据，完全由 `features/journey/journeyEvents.ts` 从 `userHistory` 派生：
+
+| 字段          | 事件   | 是否默认显示             |
+| ------------- | ------ | ------------------------ |
+| `completedAt` | 看完   | 是                       |
+| `startedAt`   | 开始看 | 是                       |
+| `addedAt`     | 收录   | 否（页面上可勾选显示）   |
+| `updatedAt`   | —      | 从不生成事件，只用于排序 |
+
+**按精度归位，不补全：**
+
+- 时刻（`…T…Z`）按浏览器时区换算为当地年月，因此 12 月 31 日深夜看完的作品落在用户所在时区的那一年。
+- `YYYY-MM-DD`、`YYYY-MM` 直接读取年和月，不做时区换算。
+- `YYYY` 只有年份：归入该年的“{年}年内”分组，排在所有月份之后；不会被分到 1 月或 12 月，也不会显示虚构的月日。
+
+**排序（确定性，与输入顺序无关）：** 每个事件有一个可比较的时间点（日期精度不足时取该区间起点）。按时间点从新到旧；时间点相同时精度高的在前（时刻 → 日 → 月 → 年），因此同月中“6 月 20 日”排在只知道“6 月”的事件前；再按看完 → 开始 → 收录；最后按作品 ID。月份分组从新到旧。
+
+**跨年：** 2024 年 12 月开始、2025 年 2 月看完的作品，在 2024 年有“开始看”、在 2025 年有“看完”。年份列表是所有事件年份的并集，从新到旧。
+
+**状态与事件不一致：** 事件反映的是记录下的日期，不是当前状态。例如重看时状态回到“在看”，第一次的看完事件依然保留，并附注“现在：在看”。
+
+**缺少历史：** `COMPLETED` 但没有 `completedAt`，或 `WATCHING` 但开始、看完日期都没有的作品，计为“缺少历史”。它们不生成任何事件，也不按播出年份或收录时间猜测；页面会说明“年度统计只包含有日期的作品”，并提供可选的补录入口（点评面板中的日期字段）。`PLAN` 作品永远不算缺失。整个年鉴都是旧记录时，观看历程显示“还没有记录历史”的说明，而不是空状态。
 
 ## 年鉴存储
 
@@ -22,11 +94,40 @@ AniList GraphQL 返回值只允许通过 `shared/schemas/anime.ts` 进入应用�
 
 - `anime-horizon-selected-v3`：最多 2,000 个数字 ID。
 - `anime-horizon-details-v3`：最多 2,000 个归一化 `Anime` 对象。
+- `anime-horizon-archive-schema`：`details` 记录的 schema 版本。缺失表示 3（没有 `userHistory`），当前写入 5。
 - `anime-horizon-year-range`：年份范围和配置；读取失败使用安全默认值。
 - `anime-horizon-session-ai-config`：当前会话的 provider、endpoint、model 和个人 Key。
+
+### 存储迁移（v3 → v4）
+
+`loadArchiveState` 读取版本标记后用 `migrateArchiveRecord` 迁移每条记录，结果始终是当前 schema；`saveArchiveState` 每次写入都会写上版本 4。迁移是确定且幂等的（对迁移结果再次迁移得到相同记录）：
+
+- v3 记录补上 `userHistory`，**四个字段全部为 `null`**。迁移时间与用户何时收录、观看无关，因此绝不写入“迁移时刻”。
+- v4 记录逐字段重新校验历史；格式错误的单个日期变为未知，记录本身保留。
+- 存储键名保持不变，旧数据原地读取。已知限制：如果之后运行更旧版本的应用并保存，它会丢弃不认识的 `userHistory` 字段。
+
+### 存储迁移（v4 → v5：感受语义）
+
+v5 不是为了整理结构，而是为了让“没有标记感受”和“明确选择一般”成为两种不同的数据：
+
+- v5 起，缺少 `userReaction` 表示**没有标记感受**（未知）；`NEUTRAL` 只在用户明确选择“一般”时写入。新收录的作品没有感受，点评面板可以选择“还没有评价”把感受清回未知。
+- v5 之前，未标记的作品一律被写成 `NEUTRAL`，卡片也把它显示为“未标记感受”，所以旧数据里的 `NEUTRAL` 无法与明确的“一般”区分。迁移时 v3/v4 的 `NEUTRAL` 读作未知；`LOVE`、`LIKE`、`DISLIKE`、`HATE` 原样保留。这是有意的取舍：少数曾经明确选择“一般”的用户需要重新标记，但不会把大量“没评价过”的作品当作“一般”来推断口味。
+- 迁移以版本标记为准，因此是幂等的：v5 数据中的 `NEUTRAL` 不会再被改动。备份 v4 与 SQL 格式 2 使用同样的语义（见 `docs/backup-format.md`）。
+- 口味模型如何使用这些字段见 `docs/taste-model.md`。
 
 `details` 有内容时，它是 ID 集合的权威来源；这样可以避免 ID 和详情数组长期漂移。单个损坏详情会被忽略，整体 JSON 损坏时仍尽量保留可读取的 ID。
 
 ## 备份与合并
 
-JSON/SQL 导入都在写入前完成解析、数量限制和领域归一化。相同作品按 `id` 去重；确认导入后，导入详情覆盖同 ID 的本地详情，未出现在导入中的本地作品保留。导入失败不调用任何 state setter，因此不会产生半份备份。
+JSON/SQL 导入都在写入前完成解析、数量限制和领域归一化。相同作品按 `id` 去重；确认导入后，导入详情覆盖同 ID 的本地详情（包括状态和短评；感受只在导入中已知时覆盖，导入中没有感受不会清掉本地感受），观看历史则按字段合并（见 `docs/backup-format.md`），未出现在导入中的本地作品保留。导入失败或用户取消时不调用任何 state setter，因此不会产生半份备份。确认前的预览会显示新增、更新和保持不变的数量（`planArchiveMerge`），实际合并由 `mergeArchiveEntries` 完成；两者在 `features/archive/archiveOperations.ts` 中，JSON 与 SQL 共用。
+
+只含 ID、没有作品详情的旧备份条目无法显示，合并时会被忽略。
+
+## 目标边界（后续迁移方向）
+
+目前用户字段仍以 `user*` 前缀挂在 AniList 快照上（单一 `Map<string, Anime>`），这是为了避免一次性重写所有使用方（画像、推荐、Prompt、卡片）。约定的边界是：
+
+- 目录数据：`Anime` 中除 `user*` 以外的字段，可随时用 AniList 刷新。
+- 用户数据：`userStatus`、`userReaction`、`userNote`、`userHistory`，只能由用户操作、备份恢复或迁移写入。
+
+后续可把用户数据拆成独立的 `ArchiveEntry { animeId, status, reaction, note, history }`，与作品快照分开存储；届时新增 schema 版本 5 并复用本节的迁移方式。

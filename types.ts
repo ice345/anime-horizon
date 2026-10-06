@@ -1,3 +1,7 @@
+import type { UserHistory } from './shared/schemas/history';
+
+export type { HistoryDate, UserHistory } from './shared/schemas/history';
+
 export type Season = 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL';
 export type UserAnimeStatus = 'PLAN' | 'WATCHING' | 'COMPLETED';
 export type UserAnimeReaction = 'LOVE' | 'LIKE' | 'NEUTRAL' | 'DISLIKE' | 'HATE';
@@ -35,24 +39,26 @@ export interface Anime {
     timeUntilAiring: number;
     episode: number;
   };
-  // Personal archive metadata. AniList data never determines this value.
+  /*
+   * ---- User-owned archive fields ----
+   * Everything above is an AniList catalogue snapshot. The `user*` fields below belong to the user,
+   * exist only on archive records, and are never derived from catalogue data. In particular,
+   * anime release time (season, seasonYear, status) and user watch time (userHistory) are separate
+   * domains. See docs/data-model.md for the intended split into a separate ArchiveEntry.
+   */
   userStatus?: UserAnimeStatus;
-  // Kept locally with the user's archive; never supplied by AniList.
+  /**
+   * The user's explicit reaction. Absent means no reaction was recorded (unknown preference); NEUTRAL
+   * is an explicit "it was okay" and is never used as a default. See docs/taste-model.md.
+   */
   userReaction?: UserAnimeReaction;
   userNote?: string;
+  /** When the user added, started and completed the title. Present on every archive record. */
+  userHistory?: UserHistory;
 }
-
-export type OtakuRank = '现充' | '路人' | '动画爱好者' | '老二次元' | '萌豚' | '婆罗门' | '动漫之神';
 
 // Anilist specific Season Enum
 export const SEASONS: Season[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
-
-export const SEASON_CN: Record<Season, string> = {
-  WINTER: '冬番 (1月)',
-  SPRING: '春番 (4月)',
-  SUMMER: '夏番 (7月)',
-  FALL: '秋番 (10月)',
-};
 
 export const SEASON_ORDER: Record<Season, number> = {
   WINTER: 0,

@@ -1,5 +1,6 @@
+import { normalizeReaction, readLegacyReaction } from '../features/archive/archiveOperations';
 import { normalizeAnimeRecord } from '../shared/schemas/anime';
-import { Anime, Season, UserAnimeReaction, UserAnimeStatus } from '../types';
+import { Anime, Season, UserAnimeStatus } from '../types';
 
 const TABLE_NAME = 'anime_archive';
 export const MAX_SQL_IMPORT_BYTES = 5 * 1024 * 1024;
@@ -22,11 +23,40 @@ const INSERT_COLUMNS = [
   'user_note',
 ].join(',');
 
+export type ArchiveSqlErrorCode =
+  | 'tooLarge'
+  | 'notArchive'
+  | 'noInsert'
+  | 'columnMismatch'
+  | 'fieldTooLong'
+  | 'invalidNumber'
+  | 'fieldCount'
+  | 'tooManyRows'
+  | 'incomplete'
+  | 'empty';
+
+/** Parse failure with a stable code; the UI translates `sqlImport.error.<code>` with `count`. */
+export class ArchiveSqlError extends Error {
+  readonly code: ArchiveSqlErrorCode;
+  readonly count?: number;
+
+  constructor(code: ArchiveSqlErrorCode, message: string, count?: number) {
+    super(message);
+    this.name = 'ArchiveSqlError';
+    this.code = code;
+    this.count = count;
+  }
+}
+
 const normalizeStatus = (status: unknown): UserAnimeStatus =>
   status === 'WATCHING' || status === 'COMPLETED' ? status : 'PLAN';
 
-const normalizeReaction = (reaction: unknown): UserAnimeReaction =>
-  reaction === 'LOVE' || reaction === 'LIKE' || reaction === 'DISLIKE' || reaction === 'HATE' ? reaction : 'NEUTRAL';
+/**
+ * Export format marker. Format 2 writes NULL for "no reaction recorded" and NEUTRAL only for an explicit
+ * choice. Dumps without the marker come from older versions, where every unrated title was exported as
+ * NEUTRAL, so their NEUTRAL is imported as "no reaction".
+ */
+export const SQL_FORMAT_MARKER = '-- anime-horizon-sql-format: 2';
 
 const escapeSql = (value: string | undefined | null) => {
   if (!value) return 'NULL';
@@ -35,6 +65,8 @@ const escapeSql = (value: string | undefined | null) => {
 
 export const generateArchiveSql = (selectedAnime: Anime[]) => {
   const createTable = `
+${SQL_FORMAT_MARKER}
+-- user_reaction: NULL = no reaction recorded; NEUTRAL = "it was okay"
 -- 1. Create Table Structure for MySQL 8+
 CREATE TABLE IF NOT EXISTS \`${TABLE_NAME}\` (
   \`id\` INT AUTO_INCREMENT PRIMARY KEY,
@@ -49,7 +81,7 @@ CREATE TABLE IF NOT EXISTS \`${TABLE_NAME}\` (
   \`genres\` JSON,
   \`description\` TEXT,
   \`user_status\` VARCHAR(20) NOT NULL DEFAULT 'PLAN',
-  \`user_reaction\` VARCHAR(20) NOT NULL DEFAULT 'NEUTRAL',
+  \`user_reaction\` VARCHAR(20) NULL DEFAULT NULL,
   \`user_note\` TEXT,
   \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY \`unique_anime\` (\`anilist_id\`)
@@ -68,7 +100,7 @@ CREATE TABLE IF NOT EXISTS \`${TABLE_NAME}\` (
       const cover = escapeSql(anime.coverImage.extraLarge || anime.coverImage.large);
       const description = escapeSql(anime.description || '');
       const userStatus = escapeSql(anime.userStatus || 'PLAN');
-      const userReaction = escapeSql(anime.userReaction || 'NEUTRAL');
+      const userReaction = escapeSql(normalizeReaction(anime.userReaction));
       const userNote = escapeSql(anime.userNote?.trim() || '');
       const genres = escapeSql(JSON.stringify(anime.genres || []));
 
@@ -91,13 +123,15 @@ type SqlValue = string | number | null;
 
 const parseSqlValues = (source: string): SqlValue[][] => {
   if (new TextEncoder().encode(source).byteLength > MAX_SQL_IMPORT_BYTES) {
-    throw new Error('SQL 文件超过 5 MB');
+    throw new ArchiveSqlError('tooLarge', 'SQL is larger than 5 MB');
   }
 
   const insertMatch = source.match(/INSERT\s+IGNORE\s+INTO\s+`anime_archive`\s*\(([^)]{1,2000})\)\s*VALUES\b/i);
-  if (!insertMatch || insertMatch.index === undefined) throw new Error('未找到受支持的年鉴 INSERT 语句');
+  if (!insertMatch || insertMatch.index === undefined)
+    throw new ArchiveSqlError('noInsert', 'No supported archive INSERT statement');
   const columns = insertMatch[1].replace(/`/g, '').replace(/\s+/g, '').toLowerCase();
-  if (columns !== INSERT_COLUMNS) throw new Error('年鉴 INSERT 字段与当前导出格式不匹配');
+  if (columns !== INSERT_COLUMNS)
+    throw new ArchiveSqlError('columnMismatch', 'INSERT columns do not match the export format');
 
   const body = source.slice(insertMatch.index + insertMatch[0].length);
   const rows: SqlValue[][] = [];
@@ -108,11 +142,11 @@ const parseSqlValues = (source: string): SqlValue[][] => {
 
   const pushField = () => {
     const raw = field.trim();
-    if (raw.length > MAX_SQL_FIELD_CHARS) throw new Error('SQL 字段过长');
+    if (raw.length > MAX_SQL_FIELD_CHARS) throw new ArchiveSqlError('fieldTooLong', 'SQL field is too long');
     if (!raw || raw.toUpperCase() === 'NULL') row.push(null);
     else if (/^-?\d+(?:\.\d+)?$/.test(raw)) {
       const number = Number(raw);
-      if (!Number.isFinite(number)) throw new Error('SQL 数值无效');
+      if (!Number.isFinite(number)) throw new ArchiveSqlError('invalidNumber', 'Invalid SQL number');
       row.push(number);
     } else row.push(raw);
     field = '';
@@ -154,16 +188,18 @@ const parseSqlValues = (source: string): SqlValue[][] => {
       pushField();
     } else if (char === ')') {
       pushField();
-      if (row.length !== MAX_SQL_FIELDS) throw new Error(`SQL 行字段数量必须为 ${MAX_SQL_FIELDS}`);
+      if (row.length !== MAX_SQL_FIELDS)
+        throw new ArchiveSqlError('fieldCount', `SQL rows must have ${MAX_SQL_FIELDS} fields`, MAX_SQL_FIELDS);
       rows.push(row);
-      if (rows.length > MAX_SQL_ROWS) throw new Error(`SQL 行数不能超过 ${MAX_SQL_ROWS}`);
+      if (rows.length > MAX_SQL_ROWS)
+        throw new ArchiveSqlError('tooManyRows', `SQL cannot exceed ${MAX_SQL_ROWS} rows`, MAX_SQL_ROWS);
       inRow = false;
     } else if (char !== ';') {
       field += char;
     }
   }
 
-  if (inString || inRow) throw new Error('SQL 内容不完整');
+  if (inString || inRow) throw new ArchiveSqlError('incomplete', 'SQL content is incomplete');
   return rows;
 };
 
@@ -181,9 +217,11 @@ const parseGenres = (value: SqlValue) => {
 };
 
 export const parseArchiveSql = (source: string): Anime[] => {
-  if (!source.includes(`\`${TABLE_NAME}\``)) throw new Error('这不是 Anime Horizon 导出的年鉴 SQL');
+  if (!source.includes(`\`${TABLE_NAME}\``))
+    throw new ArchiveSqlError('notArchive', 'Not an Anime Horizon archive SQL export');
 
   const seenIds = new Set<string>();
+  const readReaction = source.includes(SQL_FORMAT_MARKER) ? normalizeReaction : readLegacyReaction;
   const anime = parseSqlValues(source).flatMap((row) => {
     const [
       id,
@@ -228,7 +266,7 @@ export const parseArchiveSql = (source: string): Anime[] => {
         format: typeof format === 'string' ? format : undefined,
         description: typeof description === 'string' ? description : undefined,
         userStatus: normalizeStatus(userStatus),
-        userReaction: normalizeReaction(userReaction),
+        userReaction: readReaction(userReaction),
         userNote: typeof userNote === 'string' ? userNote.slice(0, 280) : undefined,
       });
       seenIds.add(animeId);
@@ -238,6 +276,6 @@ export const parseArchiveSql = (source: string): Anime[] => {
     }
   });
 
-  if (!anime.length) throw new Error('没有找到可导入的作品');
+  if (!anime.length) throw new ArchiveSqlError('empty', 'No importable titles found');
   return anime;
 };

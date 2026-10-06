@@ -8,16 +8,13 @@ import {
   setSessionAIConfig,
 } from '../services/geminiService';
 import { useModalA11y } from '../hooks/useModalA11y';
+import { useI18n } from '../shared/i18n/useI18n';
+import { MessageKey, MessageParams } from '../shared/i18n/translate';
 
 interface AISettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-const providerLabel: Record<SessionAIProvider, string> = {
-  DEEPSEEK: '个人 DeepSeek',
-  OPENAI_COMPATIBLE: '个人兼容模型',
-};
 
 export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClose }) => {
   const [initialConfig] = useState(() => getSessionAIConfig());
@@ -26,7 +23,10 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
   const [endpoint, setEndpoint] = useState(() => initialConfig?.endpoint || DEFAULT_DEEPSEEK_ENDPOINT);
   const [model, setModel] = useState(() => initialConfig?.model || DEFAULT_DEEPSEEK_MODEL);
   const [activeProvider, setActiveProvider] = useState<SessionAIProvider | null>(() => initialConfig?.provider || null);
-  const [message, setMessage] = useState('');
+  const { t } = useI18n();
+  const [message, setMessage] = useState<{ key: MessageKey; params?: MessageParams } | null>(null);
+  const providerName = (value: SessionAIProvider) =>
+    t(value === 'DEEPSEEK' ? 'aiSettings.providerLabel.DEEPSEEK' : 'aiSettings.providerLabel.OPENAI_COMPATIBLE');
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useModalA11y(isOpen, onClose, dialogRef);
@@ -35,7 +35,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
 
   const changeProvider = (nextProvider: SessionAIProvider) => {
     setProvider(nextProvider);
-    setMessage('');
+    setMessage(null);
     if (nextProvider === 'DEEPSEEK') {
       setEndpoint(DEFAULT_DEEPSEEK_ENDPOINT);
       setModel(DEFAULT_DEEPSEEK_MODEL);
@@ -44,7 +44,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
 
   const activatePersonalProvider = () => {
     if (!apiKey.trim() || !endpoint.trim() || !model.trim()) {
-      setMessage('请填写 API Key、Chat Completions 地址和模型名。');
+      setMessage({ key: 'aiSettings.missingFields' });
       return;
     }
 
@@ -52,9 +52,9 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
       setSessionAIConfig({ provider, apiKey, endpoint, model });
       setApiKey('');
       setActiveProvider(provider);
-      setMessage(`已启用${providerLabel[provider]}：仅在当前浏览器会话内有效。`);
+      setMessage({ key: 'aiSettings.enabled', params: { provider: providerName(provider) } });
     } catch {
-      setMessage('配置不合法：接口地址必须使用 HTTPS（本机开发可使用 HTTP），Key 和模型名也不能为空。');
+      setMessage({ key: 'aiSettings.invalid' });
     }
   };
 
@@ -62,7 +62,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
     clearSessionAIConfig();
     setApiKey('');
     setActiveProvider(null);
-    setMessage('已恢复使用站点默认 AI 服务。');
+    setMessage({ key: 'aiSettings.restored' });
   };
 
   return (
@@ -78,14 +78,14 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
         <div className="sticky top-0 z-10 border-b border-yearbook-line bg-yearbook-blue/95 px-6 py-5 backdrop-blur">
           <div className="flex items-start justify-between gap-5">
             <div>
-              <p className="ah-section-label">AI & Privacy</p>
+              <p className="ah-section-label">{t('aiSettings.eyebrow')}</p>
               <h2 id="ai-settings-title" className="mt-2 font-jp text-2xl font-medium text-yearbook-ink">
-                AI 与隐私
+                {t('aiSettings.title')}
               </h2>
             </div>
             <button
               type="button"
-              aria-label="关闭 AI 与隐私设置"
+              aria-label={t('aiSettings.close')}
               onClick={onClose}
               className="grid h-9 w-9 place-items-center rounded-full text-yearbook-muted transition hover:bg-white hover:text-yearbook-ink"
             >
@@ -102,24 +102,24 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
           >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h3 className="font-medium text-yearbook-ink">当前 AI 服务</h3>
+                <h3 className="font-medium text-yearbook-ink">{t('aiSettings.current')}</h3>
                 <p className="mt-1 text-sm text-yearbook-muted">
                   {activeProvider
-                    ? `${providerLabel[activeProvider]}（本次会话；不会读取 Render Key）`
-                    : '站点默认服务（Render；无需填写个人 Key）'}
+                    ? t('aiSettings.personalActive', { provider: providerName(activeProvider) })
+                    : t('aiSettings.siteDefault')}
                 </p>
               </div>
               <span
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${activeProvider ? 'bg-sky-500 text-white' : 'bg-yearbook-blue text-yearbook-muted'}`}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${activeProvider ? 'bg-yearbook-sky text-white' : 'bg-yearbook-blue text-yearbook-muted'}`}
               >
-                {activeProvider ? '个人模式' : '默认模式'}
+                {activeProvider ? t('aiSettings.personalMode') : t('aiSettings.defaultMode')}
               </span>
             </div>
           </div>
 
           <div className="space-y-3">
             <label htmlFor="session-ai-provider" className="block text-sm font-medium text-yearbook-ink">
-              本次会话的模型服务
+              {t('aiSettings.provider')}
             </label>
             <select
               id="session-ai-provider"
@@ -127,21 +127,21 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
               onChange={(event) => changeProvider(event.target.value as SessionAIProvider)}
               className="w-full border border-yearbook-line bg-white px-3 py-3 text-sm text-yearbook-ink outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
             >
-              <option value="DEEPSEEK">DeepSeek</option>
-              <option value="OPENAI_COMPATIBLE">兼容 OpenAI Chat Completions 的服务</option>
+              <option value="DEEPSEEK">{t('aiSettings.providerDeepSeek')}</option>
+              <option value="OPENAI_COMPATIBLE">{t('aiSettings.providerCompatible')}</option>
             </select>
           </div>
 
           <div>
             <label htmlFor="session-ai-key" className="block text-sm font-medium text-yearbook-ink">
-              个人 API Key
+              {t('aiSettings.apiKey')}
             </label>
             <input
               id="session-ai-key"
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder={activeProvider ? '已启用；输入新 Key 可替换' : 'sk-...'}
+              placeholder={activeProvider ? t('aiSettings.apiKeyActive') : 'sk-...'}
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={false}
@@ -152,7 +152,7 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_170px]">
             <div>
               <label htmlFor="session-ai-endpoint" className="block text-sm font-medium text-yearbook-ink">
-                Chat Completions 地址
+                {t('aiSettings.endpoint')}
               </label>
               <input
                 id="session-ai-endpoint"
@@ -166,13 +166,13 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
             </div>
             <div>
               <label htmlFor="session-ai-model" className="block text-sm font-medium text-yearbook-ink">
-                模型名
+                {t('aiSettings.model')}
               </label>
               <input
                 id="session-ai-model"
                 value={model}
                 onChange={(event) => setModel(event.target.value)}
-                placeholder="模型 ID"
+                placeholder={t('aiSettings.modelPlaceholder')}
                 autoComplete="off"
                 spellCheck={false}
                 className="mt-3 w-full border border-yearbook-line bg-white px-3 py-3 font-mono text-xs text-yearbook-ink outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
@@ -180,17 +180,14 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          <p className="text-xs leading-5 text-yearbook-muted">
-            个人配置会从浏览器直接请求对应服务，不经过本站 Render，也不会保存到数据库。兼容模式适用于提供 Chat
-            Completions 接口且允许浏览器跨域请求的服务；若服务不允许跨域，请使用该服务官方网页或保持站点默认模式。
-          </p>
+          <p className="text-xs leading-5 text-yearbook-muted">{t('aiSettings.privacyNote')}</p>
 
           {message && (
             <p
               role="status"
               className="border-l-2 border-yearbook-sky bg-yearbook-blue/60 px-3 py-2 text-sm text-yearbook-ink"
             >
-              {message}
+              {t(message.key, message.params)}
             </p>
           )}
 
@@ -201,15 +198,15 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
                 onClick={returnToDefault}
                 className="min-h-11 border border-yearbook-line px-4 text-sm font-medium text-yearbook-ink transition hover:bg-yearbook-blue"
               >
-                恢复站点默认服务
+                {t('aiSettings.restoreDefault')}
               </button>
             )}
             <button
               type="button"
               onClick={activatePersonalProvider}
-              className="min-h-11 bg-yearbook-sky px-4 text-sm font-medium text-white transition hover:bg-sky-600"
+              className="min-h-11 bg-yearbook-sky px-4 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong"
             >
-              {activeProvider ? '替换个人配置' : '启用个人配置'}
+              {activeProvider ? t('aiSettings.replace') : t('aiSettings.enable')}
             </button>
           </div>
         </div>

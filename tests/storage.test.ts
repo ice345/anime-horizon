@@ -59,12 +59,24 @@ describe('archive storage boundary', () => {
     expect(state.selectedIds).toEqual(new Set(['77']));
   });
 
-  it('migrates legacy archive entries without a status using their release period', () => {
+  it('migrates legacy archive entries without a status to PLAN instead of inferring from the release period', () => {
     const storage = new MemoryStorage();
     const { userStatus: _legacyStatus, ...legacyAnime } = anime;
-    storage.setItem(ARCHIVE_STORAGE_KEYS.details, JSON.stringify([legacyAnime]));
+    storage.setItem(ARCHIVE_STORAGE_KEYS.details, JSON.stringify([{ ...legacyAnime, status: 'FINISHED' }]));
 
     const state = loadArchiveState(storage);
-    expect(state.selectedAnimeDetails.get('77')).toMatchObject({ userStatus: 'COMPLETED' });
+    expect(state.selectedAnimeDetails.get('77')).toMatchObject({ userStatus: 'PLAN' });
+  });
+});
+
+describe('retired storage', () => {
+  it('clears keys from removed features and nothing else', async () => {
+    const { clearRetiredStorage } = await import('../shared/storage/retiredStorage');
+    const storage = new MemoryStorage();
+    storage.setItem('anime-horizon-game-stats-v1', '{"score":10}');
+    storage.setItem(ARCHIVE_STORAGE_KEYS.details, '[]');
+    clearRetiredStorage(storage);
+    expect(storage.getItem('anime-horizon-game-stats-v1')).toBeNull();
+    expect(storage.getItem(ARCHIVE_STORAGE_KEYS.details)).toBe('[]');
   });
 });

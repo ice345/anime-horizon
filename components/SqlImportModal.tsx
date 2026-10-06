@@ -1,7 +1,16 @@
 import React, { useRef, useState } from 'react';
-import { MAX_SQL_IMPORT_BYTES, parseArchiveSql } from '../services/archiveSql';
+import { ArchiveSqlError, MAX_SQL_IMPORT_BYTES, parseArchiveSql } from '../services/archiveSql';
 import { Anime } from '../types';
 import { useModalA11y } from '../hooks/useModalA11y';
+import { useI18n } from '../shared/i18n/useI18n';
+import { getDisplayTitle } from '../shared/i18n/animeTitle';
+import { MessageKey, MessageParams } from '../shared/i18n/translate';
+
+interface ImportMessage {
+  key: MessageKey;
+  params?: MessageParams;
+  success?: boolean;
+}
 
 interface SqlImportModalProps {
   isOpen: boolean;
@@ -11,7 +20,8 @@ interface SqlImportModalProps {
 
 export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose, onImport }) => {
   const [content, setContent] = useState('');
-  const [message, setMessage] = useState('');
+  const { t, locale } = useI18n();
+  const [message, setMessage] = useState<ImportMessage | null>(null);
   const [preview, setPreview] = useState<Anime[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -24,17 +34,22 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
     try {
       const anime = parseArchiveSql(content);
       setPreview(anime);
-      setMessage(`预览成功：发现 ${anime.length} 部作品。确认后会按作品 ID 合并到本地年鉴。`);
+      setMessage({ key: 'sqlImport.previewReady', params: { count: anime.length }, success: true });
     } catch (error) {
       setPreview(null);
-      setMessage(error instanceof Error ? error.message : '导入失败，请检查粘贴内容。');
+      if (error instanceof ArchiveSqlError) {
+        const key: MessageKey = `sqlImport.error.${error.code}`;
+        setMessage({ key, params: { count: error.count ?? 0 } });
+      } else {
+        setMessage({ key: 'sqlImport.error.generic' });
+      }
     }
   };
 
   const handleImport = () => {
     if (!preview) return;
     onImport(preview);
-    setMessage(`已恢复 ${preview.length} 部作品，观看状态也一并带回来了。`);
+    setMessage({ key: 'sqlImport.imported', params: { count: preview.length }, success: true });
     setContent('');
     setPreview(null);
   };
@@ -44,19 +59,19 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
     event.target.value = '';
     if (!file) return;
     if (file.size > MAX_SQL_IMPORT_BYTES) {
-      setMessage('文件超过 5 MB，请确认选择的是年鉴 SQL 文件。');
+      setMessage({ key: 'sqlImport.fileTooLarge' });
       return;
     }
     try {
       setContent(await file.text());
       setPreview(null);
-      setMessage(`已读取 ${file.name}，可以先解析预览。`);
+      setMessage({ key: 'sqlImport.fileLoaded', params: { name: file.name }, success: true });
     } catch {
-      setMessage('文件读取失败，请重新选择。');
+      setMessage({ key: 'sqlImport.fileFailed' });
     }
   };
 
-  const messageIsSuccess = message.startsWith('已') || message.startsWith('预览');
+  const messageIsSuccess = Boolean(message?.success);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-md animate-fade-in sm:items-center">
@@ -70,17 +85,15 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
       >
         <div className="flex items-start justify-between border-b border-yearbook-line px-5 py-5 sm:px-6">
           <div>
-            <p className="ah-section-label">Archive Restore</p>
+            <p className="ah-section-label">{t('sqlImport.eyebrow')}</p>
             <h2 id="sql-import-title" className="mt-2 font-jp text-2xl font-medium text-yearbook-ink">
-              导入年鉴数据
+              {t('sqlImport.title')}
             </h2>
-            <p className="mt-2 text-sm leading-6 text-yearbook-muted">
-              粘贴或选择 Anime Horizon 导出的 SQL。相同作品会更新为导入内容，其余本地作品会保留。
-            </p>
+            <p className="mt-2 text-sm leading-6 text-yearbook-muted">{t('sqlImport.intro')}</p>
           </div>
           <button
             type="button"
-            aria-label="关闭年鉴数据导入"
+            aria-label={t('sqlImport.close')}
             onClick={onClose}
             className="ml-4 grid h-9 w-9 shrink-0 place-items-center rounded-full text-yearbook-muted transition hover:bg-yearbook-blue hover:text-yearbook-ink"
           >
@@ -91,14 +104,14 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
         <div className="min-h-0 flex-1 p-5 sm:p-6">
           <div className="mb-2 flex items-center justify-between gap-3">
             <label htmlFor="archive-sql-import" className="text-sm font-medium text-yearbook-ink">
-              年鉴 SQL
+              {t('sqlImport.label')}
             </label>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="shrink-0 text-sm font-medium text-yearbook-sky transition hover:text-yearbook-ink"
             >
-              选择 SQL 文件
+              {t('sqlImport.chooseFile')}
             </button>
             <input
               ref={fileInputRef}
@@ -114,27 +127,27 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
             onChange={(event) => {
               setContent(event.target.value);
               setPreview(null);
-              setMessage('');
+              setMessage(null);
             }}
-            placeholder="将“导出年鉴数据”中的 SQL 粘贴到这里"
+            placeholder={t('sqlImport.placeholder')}
             className="custom-scrollbar h-[42dvh] min-h-52 w-full resize-none border border-yearbook-line bg-yearbook-paper p-4 font-mono text-xs leading-6 text-yearbook-ink outline-none transition placeholder:text-yearbook-muted focus:border-yearbook-sky sm:text-sm"
           />
           {preview && (
             <div className="mt-4 border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-800">
-              <p className="font-medium">导入预览：{preview.length} 部作品</p>
+              <p className="font-medium">{t('sqlImport.previewTitle', { count: preview.length })}</p>
               <p className="mt-2 leading-6">
                 {preview
                   .slice(0, 8)
-                  .map((anime) => anime.title.native || anime.title.romaji || anime.title.english)
-                  .join('、')}
-                {preview.length > 8 ? '……' : ''}
+                  .map((anime) => getDisplayTitle(anime, locale))
+                  .join(' / ')}
+                {preview.length > 8 ? ' …' : ''}
               </p>
-              <p className="mt-2 text-xs text-emerald-700">只会更新相同作品 ID 的详情，不会删除其他本地作品。</p>
+              <p className="mt-2 text-xs text-emerald-700">{t('sqlImport.previewNote')}</p>
             </div>
           )}
           {message && (
             <p role="status" className={`mt-3 text-sm ${messageIsSuccess ? 'text-emerald-700' : 'text-rose-600'}`}>
-              {message}
+              {t(message.key, message.params)}
             </p>
           )}
         </div>
@@ -145,24 +158,24 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
             onClick={onClose}
             className="min-h-10 px-4 text-sm text-yearbook-muted transition hover:text-yearbook-ink"
           >
-            取消
+            {t('common.cancel')}
           </button>
           {!preview ? (
             <button
               type="button"
               onClick={handlePreview}
               disabled={!content.trim()}
-              className="min-h-10 bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="min-h-10 bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong disabled:cursor-not-allowed disabled:opacity-50"
             >
-              解析并预览
+              {t('sqlImport.preview')}
             </button>
           ) : (
             <button
               type="button"
               onClick={handleImport}
-              className="min-h-10 bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:bg-sky-600"
+              className="min-h-10 bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong"
             >
-              确认合并
+              {t('sqlImport.confirm')}
             </button>
           )}
         </div>

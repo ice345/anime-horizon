@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchAnimeBySeason } from '../services/anilistService';
-import { Anime, Season, SEASON_CN } from '../types';
+import { Anime, Season } from '../types';
+import { MyAnimeTab } from '../services/router';
+import { seasonNameKey } from '../shared/i18n/keys';
+import { useI18n } from '../shared/i18n/useI18n';
+import { getDisplayTitle } from '../shared/i18n/animeTitle';
+import { Locale } from '../shared/i18n/locales';
 import { AnimeCard } from './AnimeCard';
 import { EmptyState } from './home/EmptyState';
 import { FeaturedSection } from './home/FeaturedSection';
@@ -8,19 +13,18 @@ import { FilterBar } from './home/FilterBar';
 import { SeasonalHero } from './home/SeasonalHero';
 import { SiteFooter } from './home/SiteFooter';
 import { WatchlistSummary } from './home/WatchlistSummary';
-import { TasteProfile } from '../services/tasteProfile';
 
 interface GuidePageProps {
   year: number;
-  itemsPerSeason: number;
   selectedIds: Set<string>;
   selectedAnime: Anime[];
-  profile: TasteProfile;
   onToggle: (id: string, anime: Anime) => void;
-  onOpenArchive: () => void;
-  onAnalyze: () => void;
+  onOpenMyAnime: (tab?: MyAnimeTab) => void;
+  onOpenRecommendations: () => void;
   onAnimeLoaded: (anime: Anime[]) => void;
-  onLoadError: (message: string) => void;
+  /** True while a season request is in flight (so callers can tell "loading" from "empty"). */
+  onLoadingChange?: (loading: boolean) => void;
+  onLoadError: (error: unknown) => void;
   reloadKey: number;
 }
 
@@ -32,11 +36,10 @@ const getCurrentSeason = (): Season => {
   return 'FALL';
 };
 
-const sortAnime = (items: Anime[], sort: string) =>
+const sortAnime = (items: Anime[], sort: string, locale: Locale) =>
   [...items].sort((left, right) => {
     if (sort === 'score') return (right.averageScore || 0) - (left.averageScore || 0);
-    if (sort === 'title')
-      return (left.title.native || left.title.romaji).localeCompare(right.title.native || right.title.romaji, 'ja');
+    if (sort === 'title') return getDisplayTitle(left, locale).localeCompare(getDisplayTitle(right, locale), locale);
     return (
       (right.nextAiringEpisode?.airingAt || 0) - (left.nextAiringEpisode?.airingAt || 0) ||
       (right.popularity || 0) - (left.popularity || 0)
@@ -45,17 +48,17 @@ const sortAnime = (items: Anime[], sort: string) =>
 
 export const GuidePage: React.FC<GuidePageProps> = ({
   year,
-  itemsPerSeason,
   selectedIds,
   selectedAnime,
-  profile,
   onToggle,
-  onOpenArchive,
-  onAnalyze,
+  onOpenMyAnime,
+  onOpenRecommendations,
   onAnimeLoaded,
+  onLoadingChange,
   onLoadError,
   reloadKey,
 }) => {
+  const { t, locale } = useI18n();
   const [season, setSeason] = useState<Season>(getCurrentSeason());
   const [anime, setAnime] = useState<Anime[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,26 +72,29 @@ export const GuidePage: React.FC<GuidePageProps> = ({
     const loadTimer = window.setTimeout(() => {
       if (controller.signal.aborted) return;
       setIsLoading(true);
+      onLoadingChange?.(true);
       setAnime([]);
       onAnimeLoaded([]);
-      fetchAnimeBySeason(year, season, itemsPerSeason, controller.signal)
+      fetchAnimeBySeason(year, season, controller.signal)
         .then((data) => {
           setAnime(data);
           onAnimeLoaded(data);
         })
         .catch((error) => {
           if (controller.signal.aborted) return;
-          onLoadError(error instanceof Error ? error.message : '番剧目录加载失败，请稍后重试。');
+          onLoadError(error);
         })
         .finally(() => {
-          if (!controller.signal.aborted) setIsLoading(false);
+          if (controller.signal.aborted) return;
+          setIsLoading(false);
+          onLoadingChange?.(false);
         });
     }, 0);
     return () => {
       window.clearTimeout(loadTimer);
       controller.abort();
     };
-  }, [itemsPerSeason, onAnimeLoaded, onLoadError, reloadKey, season, year]);
+  }, [onAnimeLoaded, onLoadError, onLoadingChange, reloadKey, season, year]);
 
   const genres = useMemo(() => Array.from(new Set(anime.flatMap((item) => item.genres))).sort(), [anime]);
   const seasonSelections = useMemo(
@@ -107,12 +113,13 @@ export const GuidePage: React.FC<GuidePageProps> = ({
             (genre === 'ALL' || item.genres.includes(genre)) && haystack.includes(search.trim().toLocaleLowerCase())
           );
         }),
-        sort
+        sort,
+        locale
       ),
-    [anime, genre, search, sort]
+    [anime, genre, search, sort, locale]
   );
-  const focusAnime = useMemo(() => sortAnime(anime, 'score').slice(0, 6), [anime]);
-  const seasonName = SEASON_CN[season].split(' ')[0];
+  const focusAnime = useMemo(() => sortAnime(anime, 'score', locale).slice(0, 6), [anime, locale]);
+  const seasonName = t(seasonNameKey(season));
 
   return (
     <main className="relative z-10 mx-auto max-w-[var(--ah-page-width)] px-5 pb-12 pt-7 md:px-8 md:pt-9">
@@ -131,24 +138,20 @@ export const GuidePage: React.FC<GuidePageProps> = ({
           anime={focusAnime}
           selectedIds={selectedIds}
           onToggle={(item) => onToggle(String(item.id), item)}
+          onOpenRecommendations={onOpenRecommendations}
         />
-        <WatchlistSummary
-          selectedAnime={selectedAnime}
-          profile={profile}
-          onOpenArchive={onOpenArchive}
-          onAnalyze={onAnalyze}
-        />
+        <WatchlistSummary selectedAnime={selectedAnime} onOpenMyAnime={onOpenMyAnime} />
       </section>
 
       <section id="catalogue" aria-labelledby="catalogue-title" className="mt-12 scroll-mt-24">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="ah-section-label">All Titles</p>
+            <p className="ah-section-label">{t('guide.catalogueEyebrow')}</p>
             <h2 id="catalogue-title" className="mt-2 font-jp text-3xl font-medium text-yearbook-ink">
-              {seasonName}番表
+              {t('guide.catalogueTitle', { season: seasonName })}
             </h2>
           </div>
-          <p className="text-sm text-yearbook-muted">{filteredAnime.length} 部作品</p>
+          <p className="text-sm text-yearbook-muted">{t('guide.count', { count: filteredAnime.length })}</p>
         </div>
 
         <FilterBar
@@ -185,7 +188,7 @@ export const GuidePage: React.FC<GuidePageProps> = ({
           </div>
         ) : (
           <div className="mt-6">
-            <EmptyState message="没有找到符合当前筛选条件的作品。换一个关键词，或者回到全部类型看看。" />
+            <EmptyState message={t('guide.empty')} />
           </div>
         )}
       </section>

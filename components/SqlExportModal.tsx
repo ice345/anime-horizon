@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Anime } from '../types';
 import { generateArchiveSql } from '../services/archiveSql';
 import { useModalA11y } from '../hooks/useModalA11y';
+import { useI18n } from '../shared/i18n/useI18n';
 
 interface SqlExportModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface SqlExportModalProps {
 }
 
 export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose, selectedAnime }) => {
+  const { t } = useI18n();
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalA11y(isOpen, onClose, dialogRef);
@@ -86,15 +88,15 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose,
         <div className="flex shrink-0 items-center justify-between border-b border-white/5 bg-gradient-to-r from-blue-600/10 to-transparent p-5 sm:p-6">
           <div>
             <h2 id="sql-export-title" className="font-jp text-xl font-bold text-blue-400">
-              本地数据库导出 (SQL)
+              {t('sqlExport.title')}
             </h2>
             <p className="text-xs text-gray-500 mt-1.5 font-mono">
-              将当前选中的 {selectedAnime.length} 部番剧导出为 MySQL 兼容格式。包含封面、简介与评分。
+              {t('sqlExport.intro', { count: selectedAnime.length })}
             </p>
           </div>
           <button
             type="button"
-            aria-label="关闭年鉴数据导出"
+            aria-label={t('sqlExport.close')}
             onClick={onClose}
             className="rounded-full p-2 text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
           >
@@ -114,7 +116,7 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose,
         <div className="relative h-[55dvh] min-h-[240px] max-h-[640px] flex-1 overflow-hidden bg-[#080808]">
           <pre
             tabIndex={0}
-            aria-label="SQL 导出内容"
+            aria-label={t('sqlExport.contentAria')}
             className="custom-scrollbar absolute inset-0 overflow-auto whitespace-pre-wrap break-words p-5 pb-20 font-mono text-xs leading-relaxed text-emerald-400/90 sm:p-6 sm:pb-20 sm:text-sm"
           >
             {sqlCode}
@@ -126,7 +128,7 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose,
               onClick={handleDownload}
               className="rounded-lg border border-white/15 bg-[#171717] px-3 py-2 text-sm font-bold text-gray-200 shadow-lg transition hover:border-white/30 hover:bg-[#222]"
             >
-              下载 .sql
+              {t('sqlExport.download')}
             </button>
             <button
               type="button"
@@ -142,14 +144,18 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose,
                   }
                 `}
             >
-              {copyState === 'copied' ? '已复制' : copyState === 'error' ? '复制失败，请手动选择' : '复制 SQL'}
+              {copyState === 'copied'
+                ? t('common.copied')
+                : copyState === 'error'
+                  ? t('common.copyFailed')
+                  : t('sqlExport.copy')}
             </button>
           </div>
         </div>
 
         {/* Footer */}
         <div className="flex shrink-0 items-center justify-between border-t border-white/5 bg-[#0a0a0c] p-4 text-xs text-gray-500">
-          <span>适用于 MySQL 8.0+ 或 MariaDB</span>
+          <span>{t('sqlExport.compatibility')}</span>
           <span className="font-mono opacity-50">{sqlCode.length.toLocaleString()} chars</span>
         </div>
       </div>

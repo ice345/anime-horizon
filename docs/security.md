@@ -21,6 +21,8 @@
 当前代码的保护包括：
 
 - `CORS_ORIGINS`/兼容的 `CORS_ORIGIN` 来源白名单；生产环境禁止 `*`。
+- 生产环境默认要求 `Origin` 头（`AI_REQUIRE_ORIGIN`）；缺失时返回 `403 ORIGIN_REQUIRED`。`Origin` 可被非浏览器客户端伪造，不是身份认证。
+- 每 IP 限流的地址来源默认是 TCP 对端；`TRUST_PROXY=<n>` 从 `X-Forwarded-For` 右侧读取，`CLIENT_IP_HEADER` 读取可信边缘写入的单值头。两者都需要按 `docs/deployment.md` 在生产环境验证防伪造。
 - 请求体、Prompt、上游响应大小上限。
 - 按 IP 的窗口限流、全局分钟/日配额和全局并发上限。
 - 上游请求超时与安全错误映射；客户端不会收到上游原始错误正文。
