@@ -26,8 +26,7 @@ interface RecallViewProps {
 
 type Phase = 'intro' | 'question' | 'summary';
 
-const actionClass =
-  'min-h-11 bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong';
+const actionClass = 'ah-button';
 
 /**
  * Journey → Recall. A light memory quiz over completed titles, followed by the user's own dates,
@@ -84,7 +83,7 @@ export const RecallView: React.FC<RecallViewProps> = ({ archive, onMyAnime, now,
   };
 
   const heading = (
-    <h2 className="font-jp text-3xl font-medium text-yearbook-ink" id="recall-title">
+    <h2 className="font-display text-[2.25rem] leading-tight text-yearbook-ink" id="recall-title">
       {t('recall.title')}
     </h2>
   );
@@ -93,8 +92,8 @@ export const RecallView: React.FC<RecallViewProps> = ({ archive, onMyAnime, now,
     return (
       <section aria-labelledby="recall-title" className="max-w-3xl">
         {heading}
-        <div className="mt-8 border-y border-dashed border-yearbook-line px-5 py-10 text-center">
-          <h3 className="font-jp text-2xl font-medium text-yearbook-ink">{t('recall.empty.title')}</h3>
+        <div className="mt-8 border-y border-yearbook-line px-5 py-10 text-center">
+          <h3 className="font-display text-2xl text-yearbook-ink">{t('recall.empty.title')}</h3>
           <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-yearbook-muted">{t('recall.empty.body')}</p>
           <button type="button" onClick={onMyAnime} className={`mt-6 ${actionClass}`}>
             {t('recall.empty.action')}
@@ -120,7 +119,7 @@ export const RecallView: React.FC<RecallViewProps> = ({ archive, onMyAnime, now,
     return (
       <section aria-labelledby="recall-title" className="max-w-3xl">
         {heading}
-        <p className="mt-6 text-lg text-yearbook-ink" role="status">
+        <p className="mt-6 font-display text-2xl text-yearbook-ink" role="status">
           {t('recall.result', { score, count: round.length })}
         </p>
         <p className="mt-2 text-xs leading-5 text-yearbook-muted">{t('recall.noImpact')}</p>
@@ -149,18 +148,23 @@ export const RecallView: React.FC<RecallViewProps> = ({ archive, onMyAnime, now,
       <p className="mt-2 text-xs font-medium text-yearbook-muted">
         {t('recall.progress', { current: index + 1, total: round.length })}
       </p>
-      <div className="mt-5 flex gap-4">
-        <img
-          src={anime.coverImage.large || anime.coverImage.extraLarge}
-          alt=""
-          className="h-32 w-24 shrink-0 bg-yearbook-blue object-cover"
-        />
+      <div
+        key={question.anime.id}
+        className="ah-fade mt-6 grid grid-cols-[96px_minmax(0,1fr)] gap-5 border-t border-yearbook-rule pt-5 sm:grid-cols-[120px_minmax(0,1fr)]"
+      >
+        <span className="ah-plate block aspect-[5/7]">
+          <img
+            src={anime.coverImage.large || anime.coverImage.extraLarge}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        </span>
         <div className="min-w-0">
           <h3
             ref={questionRef}
             tabIndex={-1}
             id="recall-question"
-            className="font-jp text-xl font-medium leading-7 text-yearbook-ink outline-none"
+            className="font-display text-[1.625rem] leading-tight text-yearbook-ink outline-none"
           >
             {getDisplayTitle(anime, locale) || t('common.untitled')}
           </h3>
@@ -168,18 +172,22 @@ export const RecallView: React.FC<RecallViewProps> = ({ archive, onMyAnime, now,
         </div>
       </div>
 
-      <div role="group" aria-labelledby="recall-question" className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div
+        role="group"
+        aria-labelledby="recall-question"
+        className="mt-6 grid grid-cols-2 border-l border-t border-yearbook-line sm:grid-cols-4"
+      >
         {question.options.map((option) => {
           const isAnswer = isCorrectAnswer(question, option);
           const isChoice = choice !== null && slotId(choice) === slotId(option);
           const state =
             choice === null
-              ? 'border-yearbook-line bg-yearbook-surface text-yearbook-ink hover:bg-yearbook-blue'
+              ? 'text-yearbook-ink hover:bg-yearbook-surface'
               : isAnswer
-                ? 'border-yearbook-sky bg-yearbook-blue font-semibold text-yearbook-ink'
+                ? 'bg-yearbook-surface text-yearbook-ink shadow-[inset_0_-2px_0_var(--ah-primary)]'
                 : isChoice
-                  ? 'border-yearbook-rose text-yearbook-ink'
-                  : 'border-yearbook-line text-yearbook-muted';
+                  ? 'text-yearbook-ink line-through decoration-yearbook-rose'
+                  : 'text-yearbook-muted';
           return (
             <button
               key={slotId(option)}
@@ -187,7 +195,7 @@ export const RecallView: React.FC<RecallViewProps> = ({ archive, onMyAnime, now,
               onClick={() => answer(option)}
               aria-disabled={choice !== null}
               aria-pressed={isChoice}
-              className={`min-h-12 border px-3 text-sm transition ${state}`}
+              className={`ah-figures min-h-14 border-b border-r border-yearbook-line px-3 text-sm transition ${state}`}
             >
               {seasonLabel(option)}
               {choice !== null && isAnswer && <span aria-hidden="true"> ✓</span>}
@@ -198,7 +206,7 @@ export const RecallView: React.FC<RecallViewProps> = ({ archive, onMyAnime, now,
 
       <div aria-live="polite">
         {choice && (
-          <div className="mt-6 border-l-2 border-yearbook-sky bg-yearbook-surface/80 px-5 py-4">
+          <div className="ah-reveal mt-6 border-l border-yearbook-rule py-1 pl-5">
             <p className="text-sm font-medium text-yearbook-ink">
               {correct ? t('recall.correct') : t('recall.incorrect', { answer: seasonLabel(question.answer) })}
             </p>

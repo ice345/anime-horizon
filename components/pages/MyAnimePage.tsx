@@ -44,13 +44,13 @@ export const MyAnimePage: React.FC<MyAnimePageProps> = ({
   const filtered = Boolean(query.trim() || reaction);
 
   return (
-    <main className="relative z-10 mx-auto max-w-[var(--ah-page-width)] px-5 pb-16 pt-10 md:px-8">
+    <main className="relative z-10 mx-auto max-w-[var(--ah-page-width)] px-5 pb-16 pt-10 md:px-8 md:pt-14">
       <PageHeader eyebrow={t('myAnime.eyebrow')} title={t('myAnime.title')} intro={t('myAnime.intro')} />
 
       <div
         role="group"
         aria-label={t('myAnime.tabsLabel')}
-        className="mb-6 grid grid-cols-2 gap-1 border-b border-yearbook-line sm:flex sm:flex-wrap sm:gap-6"
+        className="mb-6 flex gap-x-5 overflow-x-auto border-b border-yearbook-line scrollbar-hide sm:gap-x-8"
       >
         {MY_ANIME_TABS.map((option) => {
           const active = option === tab;
@@ -60,51 +60,51 @@ export const MyAnimePage: React.FC<MyAnimePageProps> = ({
               type="button"
               aria-pressed={active}
               onClick={() => onTabChange(option)}
-              className={`-mb-px flex min-h-11 items-center justify-between gap-2 border-b-2 px-1 text-left text-sm transition sm:justify-start ${
+              className={`flex min-h-11 shrink-0 items-baseline gap-2 border-b pt-3 text-left text-sm transition ${
                 active
-                  ? 'border-yearbook-sky font-semibold text-yearbook-ink'
+                  ? 'border-yearbook-sky text-yearbook-ink'
                   : 'border-transparent text-yearbook-muted hover:text-yearbook-ink'
               }`}
             >
               <span>{t(tabKey(option))}</span>
-              <span className="text-xs font-normal text-yearbook-muted">{counts[option]}</span>
+              <span className="ah-figures font-display text-base text-yearbook-muted">{counts[option]}</span>
             </button>
           );
         })}
       </div>
 
-      <div className="mb-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-end">
+      <div className="mb-10 grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-end sm:gap-8">
         <div>
-          <label htmlFor="my-anime-search" className="block text-sm font-medium text-yearbook-ink">
+          <label htmlFor="my-anime-search" className="block text-xs text-yearbook-muted">
             {t('myAnime.searchLabel')}
           </label>
-          <div className="mt-2 flex gap-2">
+          <div className="flex gap-3">
             <input
               id="my-anime-search"
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t('myAnime.searchPlaceholder')}
-              className="min-h-11 min-w-0 flex-1 rounded-lg border border-yearbook-line bg-yearbook-surface px-3 text-sm text-yearbook-ink outline-none transition placeholder:text-yearbook-muted/70 focus:border-yearbook-sky"
+              className="ah-field min-w-0 flex-1"
             />
             {query && (
               <button
                 type="button"
                 onClick={() => setQuery('')}
                 aria-label={t('myAnime.clearSearch')}
-                className="min-h-11 shrink-0 rounded-lg border border-yearbook-line bg-yearbook-surface px-3 text-sm text-yearbook-muted transition hover:border-yearbook-sky hover:text-yearbook-ink"
+                className="ah-link min-h-11 shrink-0 text-sm"
               >
                 {t('common.clear')}
               </button>
             )}
           </div>
         </div>
-        <label className="block text-sm font-medium text-yearbook-ink">
+        <label className="block text-xs text-yearbook-muted">
           {t('myAnime.reactionLabel')}
           <select
             value={reaction}
             onChange={(event) => setReaction(event.target.value as UserAnimeReaction | 'none' | '')}
-            className="mt-2 block min-h-11 w-full rounded-lg border border-yearbook-line bg-yearbook-surface px-3 text-sm text-yearbook-ink"
+            className="ah-field block w-full cursor-pointer"
           >
             <option value="">{t('myAnime.reactionAll')}</option>
             {REACTIONS.map((value) => (
@@ -122,11 +122,7 @@ export const MyAnimePage: React.FC<MyAnimePageProps> = ({
           <EmptyState message={filtered ? t('myAnime.empty.filtered') : t(emptyKey(tab))} />
           {!archive.length && (
             <div className="mt-6 text-center">
-              <button
-                type="button"
-                onClick={onDiscover}
-                className="min-h-11 bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong"
-              >
+              <button type="button" onClick={onDiscover} className="ah-button">
                 {t('myAnime.goDiscover')}
               </button>
             </div>
@@ -134,15 +130,15 @@ export const MyAnimePage: React.FC<MyAnimePageProps> = ({
         </div>
       ) : (
         <section aria-labelledby="my-anime-results">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-2 border-b border-yearbook-line pb-3">
-            <h2 id="my-anime-results" className="font-jp text-2xl font-medium text-yearbook-ink">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="my-anime-results" className="font-display text-[1.75rem] leading-tight text-yearbook-ink">
               {t(tabKey(tab))}
             </h2>
-            <p className="text-sm text-yearbook-muted">
+            <p className="ah-figures text-xs text-yearbook-muted">
               {t('myAnime.count', { count: entries.length })} · {t('myAnime.order')}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid gap-x-10 border-t border-yearbook-rule md:grid-cols-2 xl:grid-cols-3 [&>article:nth-child(-n+1)]:border-t-0 md:[&>article:nth-child(-n+2)]:border-t-0 xl:[&>article:nth-child(-n+3)]:border-t-0">
             {entries.map((item) => (
               <AnimeCard
                 key={item.id}

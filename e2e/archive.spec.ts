@@ -174,7 +174,7 @@ test('adding an anime that finished airing years ago records it as 想看 (PLAN)
   await mockAniList(page, [entry(9001, { seasonYear: 2006, status: 'FINISHED', userStatus: undefined })]);
   await page.goto('/');
 
-  await page.getByRole('button', { name: '加入年鉴：测试作品 9001' }).click();
+  await page.locator('#catalogue').getByRole('button', { name: '加入年鉴：测试作品 9001' }).click();
   expect((await readArchive(page))[0]).toMatchObject({ id: '9001', userStatus: 'PLAN' });
 
   await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '我的番剧' }).click();
@@ -204,7 +204,7 @@ test('season discovery includes unscored titles beyond the first page', async ({
   await page.goto('/');
 
   await expect(page.locator('#catalogue').getByText('51 部作品')).toBeVisible();
-  await expect(page.getByRole('button', { name: '加入年鉴：还没有评分的新番' })).toBeVisible();
+  await expect(page.locator('#catalogue').getByRole('button', { name: '加入年鉴：还没有评分的新番' })).toBeVisible();
 });
 
 test.describe('AI analysis failures', () => {
@@ -266,7 +266,7 @@ test('archive card controls do not overlap on a mobile viewport', async ({ page 
   await page.goto('/my-anime');
 
   const select = await page.getByLabel('ウィッチウォッチ 的观看状态').boundingBox();
-  const review = await page.getByRole('button', { name: /写点评|编辑点评/ }).boundingBox();
+  const review = await page.getByRole('button', { name: /评价与短评|编辑评价与短评/ }).boundingBox();
   const remove = await page.getByRole('button', { name: '移出年鉴：ウィッチウォッチ' }).boundingBox();
   expect(select && review && remove).toBeTruthy();
   const overlaps = (a: NonNullable<typeof select>, b: NonNullable<typeof select>) =>

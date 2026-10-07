@@ -60,21 +60,21 @@ export const YearbookPortraitModal: React.FC<YearbookPortraitModalProps> = ({ is
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[86] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-4 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[86] flex items-center justify-center overflow-y-auto bg-[#1d2735]/40 p-4 animate-fade-in">
       <section
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="portrait-title"
-        className="w-full max-w-3xl overflow-hidden border border-white/70 bg-yearbook-surface shadow-[0_28px_90px_rgba(38,54,77,0.28)]"
+        className="w-full max-w-3xl overflow-hidden border border-white/70 bg-yearbook-surface shadow-[var(--ah-shadow-soft)]"
       >
         <div className="relative overflow-hidden bg-yearbook-blue px-6 py-6 sm:px-8 sm:py-8">
           <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(98,159,220,0.35)_1px,transparent_1px)] [background-size:100%_28px]" />
           <div className="relative flex items-start justify-between gap-5">
             <div>
               <p className="ah-section-label">{t('portrait.eyebrow')}</p>
-              <h2 id="portrait-title" className="mt-2 font-jp text-3xl font-medium text-yearbook-ink">
+              <h2 id="portrait-title" className="mt-2 font-display text-3xl font-medium text-yearbook-ink">
                 {t('portrait.title')}
               </h2>
               {hasWatched && (

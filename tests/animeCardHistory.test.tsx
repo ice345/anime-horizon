@@ -32,9 +32,9 @@ const renderCard = (locale: Locale, anime: Anime, onSetReview = vi.fn()) => {
 
 describe('archive history editor', () => {
   it.each([
-    ['en', 'Write a note', 'History', 'Added', 'Oct 5, 2026', 'Unknown'],
-    ['ja', '感想を書く', '視聴の記録', '追加', '2026/10/05', '記録なし'],
-    ['zh-CN', '写点评', '观看记录', '收录', '2026年10月5日', '未记录'],
+    ['en', 'Rate or add a note', 'History', 'Added', 'Oct 5, 2026', 'Unknown'],
+    ['ja', '評価・メモ', '視聴の記録', '追加', '2026/10/05', '記録なし'],
+    ['zh-CN', '评价与短评', '观看记录', '收录', '2026年10月5日', '未记录'],
   ] as const)('shows recorded and unknown dates honestly in %s', (locale, open, title, added, date, unknown) => {
     renderCard(locale, entry());
     fireEvent.click(screen.getByRole('button', { name: open }));
@@ -48,7 +48,7 @@ describe('archive history editor', () => {
 
   it('saves a year-only backfill without inventing a month or day', () => {
     const onSetReview = renderCard('en', entry());
-    fireEvent.click(screen.getByRole('button', { name: 'Write a note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rate or add a note' }));
     fireEvent.change(screen.getByLabelText(/^Completed/), { target: { value: '2019' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -57,7 +57,7 @@ describe('archive history editor', () => {
 
   it('rejects malformed and future dates without saving', () => {
     const onSetReview = renderCard('ja', entry());
-    fireEvent.click(screen.getByRole('button', { name: '感想を書く' }));
+    fireEvent.click(screen.getByRole('button', { name: '評価・メモ' }));
     fireEvent.change(screen.getByLabelText(/^視聴開始/), { target: { value: 'June 2019' } });
     fireEvent.change(screen.getByLabelText(/^視聴完了/), { target: { value: '2100' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
@@ -78,26 +78,26 @@ describe('archive history editor', () => {
         userHistory: { addedAt: ADDED, startedAt: null, completedAt, updatedAt: ADDED },
       })
     );
-    fireEvent.click(screen.getByRole('button', { name: '写点评' }));
+    fireEvent.click(screen.getByRole('button', { name: '评价与短评' }));
     fireEvent.change(screen.getByRole('textbox', { name: /短评/ }), { target: { value: '想记住的一句话' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存点评' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     expect(onSetReview).toHaveBeenCalledWith(expect.objectContaining({ note: '想记住的一句话', completedAt }));
   });
 
   it('shows a missing reaction as unrated and an explicit NEUTRAL as "It was okay"', () => {
     renderCard('en', entry({ userNote: 'a note' }));
-    expect(screen.getByText('No rating yet')).toBeInTheDocument();
+    expect(screen.getByText('Not rated')).toBeInTheDocument();
     cleanup();
 
     renderCard('en', entry({ userReaction: 'NEUTRAL' }));
     expect(screen.getByText('It was okay')).toBeInTheDocument();
-    expect(screen.queryByText('No rating yet')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not rated')).not.toBeInTheDocument();
   });
 
   it('lets the user clear a reaction back to "no rating"', () => {
     const onSetReview = renderCard('en', entry({ userReaction: 'LIKE' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Edit note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit rating & note' }));
     fireEvent.change(screen.getByLabelText('Rating for Sound! Euphonium'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 

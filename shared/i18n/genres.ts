@@ -1,4 +1,5 @@
 import type { MessageKey } from './translate';
+import { formatKey } from './keys';
 
 /** AniList genre names are stable English identifiers; map them to semantic message keys. */
 const GENRE_KEYS: Record<string, MessageKey> = {
@@ -31,4 +32,10 @@ const GENRE_KEYS: Record<string, MessageKey> = {
 export const genreLabel = (t: (key: MessageKey) => string, genre: string) => {
   const key = GENRE_KEYS[genre];
   return key ? t(key) : genre;
+};
+
+/** Translated AniList format (TV, Movie, ...); unknown formats are shown as delivered. */
+export const formatLabel = (t: (key: MessageKey) => string, format: string | undefined) => {
+  const key = formatKey(format);
+  return key ? t(key) : format || '';
 };

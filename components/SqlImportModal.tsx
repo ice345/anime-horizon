@@ -74,7 +74,7 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
   const messageIsSuccess = Boolean(message?.success);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-md animate-fade-in sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-[#1d2735]/40 p-4 animate-fade-in sm:items-center">
       <div
         ref={dialogRef}
         tabIndex={-1}
@@ -86,7 +86,7 @@ export const SqlImportModal: React.FC<SqlImportModalProps> = ({ isOpen, onClose,
         <div className="flex items-start justify-between border-b border-yearbook-line px-5 py-5 sm:px-6">
           <div>
             <p className="ah-section-label">{t('sqlImport.eyebrow')}</p>
-            <h2 id="sql-import-title" className="mt-2 font-jp text-2xl font-medium text-yearbook-ink">
+            <h2 id="sql-import-title" className="mt-2 font-display text-2xl font-medium text-yearbook-ink">
               {t('sqlImport.title')}
             </h2>
             <p className="mt-2 text-sm leading-6 text-yearbook-muted">{t('sqlImport.intro')}</p>

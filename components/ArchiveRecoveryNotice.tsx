@@ -26,7 +26,7 @@ export const ArchiveRecoveryNotice: React.FC<ArchiveRecoveryNoticeProps> = ({
       aria-labelledby="archive-recovery-title"
       className="relative z-20 mx-auto mt-4 max-w-[var(--ah-page-width)] px-5 md:px-8"
     >
-      <div className="border-l-2 border-yearbook-rose bg-rose-50 px-5 py-4 text-sm leading-6 text-yearbook-ink">
+      <div className="border-l-2 border-yearbook-rose bg-yearbook-surface px-5 py-4 text-sm leading-6 text-yearbook-ink">
         <h2 id="archive-recovery-title" className="font-medium">
           {t('recovery.title')}
         </h2>
@@ -37,18 +37,10 @@ export const ArchiveRecoveryNotice: React.FC<ArchiveRecoveryNoticeProps> = ({
         </p>
         <p className="mt-1 text-yearbook-muted">{t('recovery.paused')}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onDownloadOriginal}
-            className="min-h-11 bg-yearbook-sky px-4 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong"
-          >
+          <button type="button" onClick={onDownloadOriginal} className="ah-button">
             {t('recovery.download')}
           </button>
-          <button
-            type="button"
-            onClick={onKeepReadable}
-            className="min-h-11 border border-yearbook-line bg-yearbook-surface px-4 text-sm font-medium text-yearbook-ink transition hover:bg-yearbook-blue"
-          >
+          <button type="button" onClick={onKeepReadable} className="ah-button-quiet">
             {t('recovery.keepReadable')}
           </button>
         </div>

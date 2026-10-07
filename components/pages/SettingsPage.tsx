@@ -24,11 +24,10 @@ interface SettingsPageProps {
   onClearSelection: () => void;
 }
 
-const sectionClass = 'border-t border-yearbook-line py-7';
-const headingClass = 'text-base font-semibold text-yearbook-ink';
+const sectionClass = 'max-w-3xl border-t border-yearbook-line py-7';
+const headingClass = 'font-display text-[1.375rem] leading-tight text-yearbook-ink';
 const hintClass = 'mt-1 max-w-2xl text-sm leading-6 text-yearbook-muted';
-const secondaryButton =
-  'min-h-11 border border-yearbook-line bg-yearbook-surface px-4 text-sm font-medium text-yearbook-ink transition hover:border-yearbook-sky hover:bg-yearbook-blue';
+const secondaryButton = 'ah-button-quiet';
 
 /** Settings: a destination for language, backups, AI and data — previously a large modal. */
 export const SettingsPage: React.FC<SettingsPageProps> = ({
@@ -77,7 +76,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const yearOptions = Array.from({ length: maxYear - minYear + 1 }, (_, index) => maxYear - index);
 
   return (
-    <main className="relative z-10 mx-auto max-w-[var(--ah-page-width)] px-5 pb-16 pt-10 md:px-8">
+    <main className="relative z-10 mx-auto max-w-[var(--ah-page-width)] px-5 pb-16 pt-10 md:px-8 md:pt-14">
       <PageHeader eyebrow={t('settings.eyebrow')} title={t('settings.title')} intro={t('settings.intro')} />
 
       <fieldset className="pb-7">
@@ -89,8 +88,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               lang={option}
               className={`flex min-h-11 cursor-pointer items-center justify-center border px-2 text-center text-sm font-medium transition has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-yearbook-sky ${
                 option === locale
-                  ? 'border-yearbook-sky bg-yearbook-blue text-yearbook-ink'
-                  : 'border-yearbook-line bg-yearbook-surface text-yearbook-muted hover:border-yearbook-sky'
+                  ? 'border-yearbook-sky text-yearbook-ink shadow-[inset_0_-1px_0_var(--ah-primary)]'
+                  : 'border-yearbook-line text-yearbook-muted hover:border-yearbook-rule'
               }`}
             >
               <input
@@ -204,7 +203,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <select
               value={startYear}
               onChange={(event) => onYearRangeChange(clampYear(Number(event.target.value)), endYear)}
-              className="mt-1 block min-h-11 w-full border border-yearbook-line bg-yearbook-surface px-3 text-sm text-yearbook-ink"
+              className="ah-field mt-1 block w-full cursor-pointer"
             >
               {yearOptions.map((option) => (
                 <option key={`start-${option}`} value={option}>
@@ -218,7 +217,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <select
               value={endYear}
               onChange={(event) => onYearRangeChange(startYear, clampYear(Number(event.target.value)))}
-              className="mt-1 block min-h-11 w-full border border-yearbook-line bg-yearbook-surface px-3 text-sm text-yearbook-ink"
+              className="ah-field mt-1 block w-full cursor-pointer"
             >
               {yearOptions.map((option) => (
                 <option key={`end-${option}`} value={option}>
@@ -244,7 +243,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             onClick={() => {
               if (window.confirm(t('settings.clearConfirm'))) onClearSelection();
             }}
-            className="min-h-11 border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-yearbook-rose transition hover:border-rose-300"
+            className="min-h-11 border border-yearbook-rose/40 px-4 text-sm font-medium text-yearbook-rose transition hover:border-yearbook-rose"
           >
             {t('settings.clearArchive')}
           </button>

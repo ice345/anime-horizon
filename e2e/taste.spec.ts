@@ -109,7 +109,7 @@ test.describe('Taste Map', () => {
     await expect(page.getByText('Based on 5 watched titles, 1 with a reaction.')).toBeVisible();
 
     await page.goto('/my-anime?status=all');
-    await page.getByRole('combobox', { name: 'Rating' }).selectOption({ label: 'No rating yet' });
+    await page.getByRole('combobox', { name: 'Rating' }).selectOption({ label: 'Not rated' });
     await expect(page.locator('main article')).toHaveCount(4);
     await page.getByRole('combobox', { name: 'Rating' }).selectOption({ label: 'It was okay' });
     await expect(page.locator('main article')).toHaveCount(0);

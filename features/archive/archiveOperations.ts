@@ -45,11 +45,20 @@ export const normalizeArchiveEntry = (anime: Anime): Anime =>
 
 /**
  * Creates the archive entry for a catalogue title the user has just added.
- * Catalogue data never decides the user's watch status or history; see DEFAULT_ARCHIVE_STATUS.
+ *
+ * Catalogue data never decides the user's watch status or history (see DEFAULT_ARCHIVE_STATUS). The
+ * status is PLAN unless the user explicitly chose another one for this add (Discover's visible
+ * "add as" control). Either way the only date recorded is `addedAt`: adding a title today says when
+ * it entered the archive, not when it was started or finished, so `startedAt` and `completedAt` stay
+ * unknown until the user records them.
  */
-export const createArchiveEntry = (anime: Anime, now: Date = new Date()): Anime => ({
+export const createArchiveEntry = (
+  anime: Anime,
+  now: Date = new Date(),
+  status: UserAnimeStatus = DEFAULT_ARCHIVE_STATUS
+): Anime => ({
   ...anime,
-  userStatus: DEFAULT_ARCHIVE_STATUS,
+  userStatus: normalizeStatus(status),
   // No reaction until the user gives one.
   userReaction: undefined,
   userNote: undefined,
