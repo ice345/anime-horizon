@@ -50,19 +50,19 @@ export const GlobalAnimeSearchModal: React.FC<GlobalAnimeSearchModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-slate-950/35 px-4 py-8 backdrop-blur-sm sm:items-center">
+    <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto bg-[#1d2735]/40 px-4 py-8 sm:items-center">
       <section
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="global-search-title"
-        className="w-full max-w-3xl overflow-hidden rounded-[var(--ah-radius-lg)] border border-white/80 bg-yearbook-surface shadow-[0_28px_90px_rgba(38,54,77,0.22)]"
+        className="w-full max-w-3xl overflow-hidden rounded-[var(--ah-radius-lg)] bg-yearbook-paper shadow-[var(--ah-shadow-soft)]"
       >
         <div className="flex items-start justify-between border-b border-yearbook-line px-5 py-5 sm:px-7">
           <div>
             <p className="ah-section-label">{t('search.eyebrow')}</p>
-            <h2 id="global-search-title" className="mt-2 font-jp text-2xl font-medium text-yearbook-ink">
+            <h2 id="global-search-title" className="mt-2 font-display text-[1.75rem] leading-tight text-yearbook-ink">
               {t('search.title')}
             </h2>
             <p className="mt-2 text-sm text-yearbook-muted">{t('search.intro')}</p>
@@ -71,7 +71,7 @@ export const GlobalAnimeSearchModal: React.FC<GlobalAnimeSearchModalProps> = ({
             type="button"
             aria-label={t('search.close')}
             onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-full text-yearbook-muted transition hover:bg-yearbook-blue hover:text-yearbook-ink"
+            className="grid h-11 w-11 place-items-center text-yearbook-muted transition hover:text-yearbook-ink"
           >
             ×
           </button>
@@ -79,7 +79,7 @@ export const GlobalAnimeSearchModal: React.FC<GlobalAnimeSearchModalProps> = ({
 
         <form
           onSubmit={submit}
-          className="grid gap-3 border-b border-yearbook-line bg-yearbook-blue/35 p-5 sm:grid-cols-[minmax(0,1fr)_130px_auto] sm:px-7"
+          className="grid gap-3 border-b border-yearbook-line p-5 sm:grid-cols-[minmax(0,1fr)_130px_auto] sm:items-end sm:px-7"
         >
           <input
             data-modal-autofocus="true"
@@ -87,13 +87,13 @@ export const GlobalAnimeSearchModal: React.FC<GlobalAnimeSearchModalProps> = ({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t('search.placeholder')}
             aria-label={t('search.inputAria')}
-            className="min-h-11 rounded-lg border border-yearbook-line bg-yearbook-surface px-3 text-sm text-yearbook-ink placeholder:text-yearbook-muted/70"
+            className="ah-field"
           />
           <select
             value={year}
             onChange={(event) => setYear(event.target.value)}
             aria-label={t('search.yearAria')}
-            className="min-h-11 rounded-lg border border-yearbook-line bg-yearbook-surface px-3 text-sm text-yearbook-muted"
+            className="ah-field cursor-pointer text-yearbook-muted"
           >
             <option value="">{t('search.allYears')}</option>
             {Array.from({ length: maxYear - minYear + 1 }, (_, index) => maxYear - index).map((item) => (
@@ -105,29 +105,28 @@ export const GlobalAnimeSearchModal: React.FC<GlobalAnimeSearchModalProps> = ({
           <button
             type="submit"
             disabled={loading || !query.trim()}
-            className="min-h-11 rounded-lg bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+            className="ah-button disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? t('search.submitting') : t('search.submit')}
           </button>
         </form>
 
         <div className="max-h-[58vh] overflow-y-auto p-5 sm:p-7">
-          {error && <p className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-600">{t('search.error')}</p>}
+          {error && (
+            <p className="border-l border-yearbook-rose py-1 pl-4 text-sm text-yearbook-rose">{t('search.error')}</p>
+          )}
           {!loading && !error && results.length === 0 && (
             <p className="py-12 text-center text-sm text-yearbook-muted">{t('search.empty')}</p>
           )}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-x-8 sm:grid-cols-2">
             {results.map((anime) => {
               const selected = selectedIds.has(String(anime.id));
               return (
-                <article
-                  key={anime.id}
-                  className="flex min-w-0 gap-3 rounded-[var(--ah-radius-md)] border border-yearbook-line bg-white p-3"
-                >
+                <article key={anime.id} className="flex min-w-0 gap-4 border-t border-yearbook-line py-4">
                   <img
                     src={anime.coverImage.large || anime.coverImage.extraLarge}
                     alt=""
-                    className="h-20 w-14 rounded-md object-cover"
+                    className="aspect-[5/7] w-14 self-start object-cover ring-1 ring-black/5"
                     loading="lazy"
                   />
                   <div className="min-w-0 flex-1">
@@ -141,7 +140,7 @@ export const GlobalAnimeSearchModal: React.FC<GlobalAnimeSearchModalProps> = ({
                       {anime.genres.slice(0, 2).join(' · ')}
                     </p>
                     {selected ? (
-                      <p className="mt-3 text-sm font-medium text-yearbook-rose">{t('card.inMyAnime')}</p>
+                      <p className="mt-3 text-[13px] text-yearbook-ink">{t('card.inMyAnime')}</p>
                     ) : (
                       <button
                         type="button"

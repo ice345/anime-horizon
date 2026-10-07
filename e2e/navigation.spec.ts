@@ -101,7 +101,7 @@ test.describe('four-destination navigation', () => {
   test('My Anime is organized by watch status and titles move between tabs', async ({ page }) => {
     await mockAniList(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Add to archive: New Show' }).click();
+    await page.locator('#catalogue').getByRole('button', { name: 'Add to archive: New Show' }).click();
     await mainNav(page).getByRole('link', { name: 'My Anime' }).click();
 
     const tabs = page.getByRole('group', { name: 'Filter by status' });

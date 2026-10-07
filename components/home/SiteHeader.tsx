@@ -43,8 +43,8 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({ active, onNavigate, onSe
   );
 
   return (
-    <header className="relative z-30 border-b border-yearbook-line/80 bg-yearbook-paper/90 backdrop-blur-md">
-      <div className="mx-auto flex min-h-[76px] max-w-[var(--ah-page-width)] items-center justify-between gap-4 px-5 md:px-8">
+    <header className="relative z-30 border-b border-yearbook-line bg-yearbook-paper">
+      <div className="mx-auto flex min-h-[68px] max-w-[var(--ah-page-width)] items-center justify-between gap-4 px-5 md:px-8">
         <a
           href="/"
           onClick={(event) => {
@@ -52,19 +52,19 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({ active, onNavigate, onSe
             event.preventDefault();
             onNavigate('discover');
           }}
-          className="text-left"
+          className="flex min-w-0 items-baseline gap-4 text-left"
         >
-          <span className="block font-sans text-lg font-semibold tracking-[0.16em] text-yearbook-ink sm:text-xl">
-            ANIME <span className="text-yearbook-sky">HORIZON</span>
+          <span className="font-display text-[1.375rem] font-medium leading-none tracking-[-0.01em] text-yearbook-ink">
+            Anime Horizon
           </span>
-          <span className="mt-1 block text-[11px] text-yearbook-muted">{t('nav.tagline')}</span>
+          <span className="hidden truncate text-[11px] text-yearbook-muted lg:block">{t('nav.tagline')}</span>
         </a>
 
-        <nav aria-label={t('nav.main')} className="hidden items-center gap-6 md:flex">
+        <nav aria-label={t('nav.main')} className="hidden items-center gap-7 md:flex">
           {DESTINATIONS.map((destination) =>
             link(
               destination,
-              `flex min-h-11 items-center border-b-2 px-1 text-sm font-medium transition-colors ${
+              `flex min-h-11 items-center border-b px-0.5 text-sm transition-colors ${
                 active === destination
                   ? 'border-yearbook-sky text-yearbook-ink'
                   : 'border-transparent text-yearbook-muted hover:text-yearbook-ink'
@@ -73,26 +73,26 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({ active, onNavigate, onSe
           )}
         </nav>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center">
           <button
             type="button"
             onClick={onSearch}
             aria-label={t('nav.search')}
-            className="ah-focus-ring grid h-11 w-11 place-items-center rounded-full text-yearbook-muted transition hover:bg-yearbook-blue hover:text-yearbook-sky"
+            className="ah-focus-ring -mr-2.5 grid h-11 w-11 place-items-center text-yearbook-muted transition hover:text-yearbook-ink"
           >
             <SearchIcon />
           </button>
         </div>
       </div>
 
-      <nav aria-label={t('nav.main')} className="border-t border-yearbook-line/70 md:hidden">
+      <nav aria-label={t('nav.main')} className="border-t border-yearbook-line md:hidden">
         <div className="mx-auto grid max-w-[var(--ah-page-width)] grid-cols-4 px-3">
           {DESTINATIONS.map((destination) =>
             link(
               destination,
-              `flex min-h-12 items-center justify-center border-b-2 px-0.5 text-center text-[13px] leading-tight sm:text-sm transition-colors ${
+              `flex min-h-11 items-center justify-center border-b px-0.5 text-center text-[13px] leading-tight transition-colors sm:text-sm ${
                 active === destination
-                  ? 'border-yearbook-sky font-semibold text-yearbook-ink'
+                  ? 'border-yearbook-sky text-yearbook-ink'
                   : 'border-transparent text-yearbook-muted'
               }`
             )

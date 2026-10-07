@@ -2,7 +2,8 @@
 
 @theme inline {
   --font-sans: 'Outfit', 'Noto Sans SC', sans-serif;
-  --font-jp: 'Zen Maru Gothic', sans-serif;
+  /* Editorial display type: year and season markers, page and section headings, lead titles. */
+  --font-display: 'Newsreader', 'Shippori Mincho', 'Noto Serif SC', serif;
 
   --color-anime-dark: var(--ah-paper);
   --color-anime-card: var(--ah-surface);
@@ -22,31 +23,17 @@
   --color-yearbook-rose: var(--ah-rose);
   --color-yearbook-rose-strong: var(--ah-rose-strong);
   --color-yearbook-line: var(--ah-border);
+  --color-yearbook-rule: var(--ah-rule);
 
-  --animate-float: float 6s ease-in-out infinite;
-  --animate-float-delayed: float 6s ease-in-out 3s infinite;
-  --animate-pulse-slow: pulse 8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-fade-in: fadeIn 0.5s ease-out forwards;
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-15px);
-  }
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -59,4 +46,280 @@ html:lang(ja) .font-sans,
 /* Likewise, keep Simplified Chinese glyph forms for zh-CN text shown inside another UI language. */
 [lang='zh-CN']:not(html) {
   font-family: 'Outfit', 'Noto Sans SC', sans-serif;
+}
+
+/* Display type follows the same rule: mincho for Japanese, song (Noto Serif SC) for Chinese. */
+html:lang(ja) .font-display {
+  font-family: 'Newsreader', 'Shippori Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+}
+html:lang(zh-CN) .font-display {
+  font-family: 'Newsreader', 'Noto Serif SC', 'Songti SC', serif;
+}
+
+@layer components {
+  /* Numerals that line up in lists and year markers. */
+  .ah-figures {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Season name set as a spaced chapter marker: S P R I N G. CJK season names keep a gentler spacing. */
+  .ah-spaced {
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+  }
+  html:lang(ja) .ah-spaced,
+  html:lang(zh-CN) .ah-spaced {
+    letter-spacing: 0.3em;
+  }
+
+  /* Plain text link in ink with a hairline underline; blue is kept for state and primary actions. */
+  .ah-link {
+    color: var(--ah-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--ah-border);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.3em;
+    transition:
+      text-decoration-color var(--ah-transition),
+      color var(--ah-transition);
+  }
+  .ah-link:hover {
+    text-decoration-color: var(--ah-ink);
+  }
+
+  /* The one filled button style. */
+  .ah-button {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    background: var(--ah-ink);
+    padding: 0 1.25rem;
+    color: var(--ah-paper);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color var(--ah-transition);
+  }
+  .ah-button:hover {
+    background: #2d3a4d;
+  }
+
+  /* Secondary action: a hairline outline, no fill. */
+  .ah-button-quiet {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--ah-border);
+    padding: 0 1rem;
+    color: var(--ah-ink);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: border-color var(--ah-transition);
+  }
+  .ah-button-quiet:hover {
+    border-color: var(--ah-rule);
+  }
+
+  /* Form fields sit on the paper as a single underline, not a box. */
+  .ah-field {
+    min-height: 2.75rem;
+    border: 0;
+    border-bottom: 1px solid var(--ah-border);
+    background: transparent;
+    padding: 0 0.125rem;
+    color: var(--ah-ink);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color var(--ah-transition);
+  }
+  .ah-field::placeholder {
+    color: var(--ah-muted);
+    opacity: 0.8;
+  }
+  .ah-field:hover,
+  .ah-field:focus {
+    border-bottom-color: var(--ah-rule);
+  }
+
+  /* Printed plate: no radius, a hairline edge so pale artwork still has a boundary. */
+  .ah-plate {
+    position: relative;
+    overflow: hidden;
+    background: var(--ah-surface-blue);
+  }
+  .ah-plate::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px rgba(29, 39, 53, 0.08);
+  }
+  .ah-plate img {
+    transition:
+      opacity 400ms ease,
+      filter 400ms ease;
+  }
+}
+
+/* Latin display lines may lean into italic; CJK never gets a synthetic oblique. */
+html:lang(en) .ah-italic {
+  font-style: italic;
+}
+
+/* Selects that read as inline text size to their value where supported (others keep their natural width). */
+.ah-autosize {
+  field-sizing: content;
+}
+
+/*
+ * Motion: acknowledge an action, never attract attention. Opacity, colour and hairline rules only,
+ * 120–180ms, no springs, no lift or zoom. prefers-reduced-motion (index.html) makes all of it immediate.
+ */
+:root {
+  --ah-motion-fast: 120ms;
+  --ah-motion: 160ms;
+  --ah-motion-slow: 180ms;
+  --ah-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes ah-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ah-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+@keyframes ah-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Content that replaces other content (season, filters, Recall's next question): a short fade. */
+.ah-fade {
+  animation: ah-fade var(--ah-motion) var(--ah-ease);
+}
+/* A panel that opens in place (editor, confirmation, answer, disclosure body). */
+.ah-reveal,
+details.ah-disclosure[open] > :not(summary) {
+  animation: ah-reveal var(--ah-motion) var(--ah-ease);
+}
+
+/* Catalogue entry: a rule draws in under the plate and the plate dims very slightly on hover. */
+.ah-entry-rule {
+  display: block;
+  height: 1px;
+  background: var(--ah-ink);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--ah-motion-slow) var(--ah-ease);
+}
+.ah-plate img {
+  transition: filter var(--ah-motion-slow) var(--ah-ease);
+}
+.group:focus-visible .ah-entry-rule {
+  transform: scaleX(1);
+}
+@media (hover: hover) {
+  .group:hover .ah-entry-rule {
+    transform: scaleX(1);
+  }
+  .group:hover .ah-plate img {
+    filter: saturate(0.94) brightness(0.97);
+  }
+}
+
+/* The annotation slot: the add hint and the personal mark share one place and cross-fade. */
+.ah-annot {
+  display: grid;
+}
+.ah-layer {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--ah-motion) var(--ah-ease),
+    transform var(--ah-motion) var(--ah-ease);
+}
+.ah-layer[data-on='false'] {
+  opacity: 0;
+  transform: translateY(2px);
+  pointer-events: none;
+}
+/* A mark that has just been made draws its rule, so the add reads as "written into the yearbook". */
+.ah-layer[data-fresh='true'] .ah-status-rule {
+  transform-origin: left;
+  animation: ah-draw var(--ah-motion-slow) var(--ah-ease);
+}
+
+/* "+ Completed": shown on hover/focus where hovering exists, always on touch screens. */
+.ah-add-hint {
+  opacity: 0;
+  transition: opacity var(--ah-motion-fast) var(--ah-ease);
+}
+.group:focus-visible .ah-add-hint {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .group:hover .ah-add-hint {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .ah-add-hint {
+    opacity: 1;
+  }
+}
+
+/* The quick-toggle cue under a just-added title: "Just added", or how to take it back. */
+.ah-cue-hover,
+.ah-cue-touch {
+  display: none;
+}
+.group:focus-visible .ah-cue-idle {
+  display: none;
+}
+.group:focus-visible .ah-cue-hover {
+  display: inline;
+}
+@media (hover: hover) {
+  .group:hover .ah-cue-idle {
+    display: none;
+  }
+  .group:hover .ah-cue-hover {
+    display: inline;
+  }
+}
+@media (hover: none) {
+  .ah-cue-idle,
+  .ah-cue-hover {
+    display: none !important;
+  }
+  .ah-cue-touch {
+    display: inline;
+  }
+}
+
+/* Editorial choices (Add as): the underline draws in under the chosen option. */
+.ah-choice-rule {
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 1px;
+  background: var(--ah-primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--ah-motion) var(--ah-ease);
+}
+input:checked + .ah-choice .ah-choice-rule {
+  transform: scaleX(1);
+}
+
+/* Status rules change colour and weight quietly when the status changes. */
+.ah-status-rule {
+  transition:
+    border-color var(--ah-motion) var(--ah-ease),
+    border-top-width var(--ah-motion) var(--ah-ease);
 }

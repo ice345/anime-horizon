@@ -66,20 +66,20 @@ export const AISettingsModal: React.FC<AISettingsModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-[#1d2735]/40 p-4 animate-fade-in">
       <div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="ai-settings-title"
-        className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-[var(--ah-radius-lg)] border border-yearbook-line bg-yearbook-surface shadow-[0_30px_90px_rgba(14,116,144,0.28)]"
+        className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-[var(--ah-radius-lg)] border border-yearbook-line bg-yearbook-surface shadow-[var(--ah-shadow-soft)]"
       >
-        <div className="sticky top-0 z-10 border-b border-yearbook-line bg-yearbook-blue/95 px-6 py-5 backdrop-blur">
+        <div className="sticky top-0 z-10 border-b border-yearbook-line bg-yearbook-surface px-6 py-5">
           <div className="flex items-start justify-between gap-5">
             <div>
               <p className="ah-section-label">{t('aiSettings.eyebrow')}</p>
-              <h2 id="ai-settings-title" className="mt-2 font-jp text-2xl font-medium text-yearbook-ink">
+              <h2 id="ai-settings-title" className="mt-2 font-display text-2xl font-medium text-yearbook-ink">
                 {t('aiSettings.title')}
               </h2>
             </div>

@@ -122,7 +122,7 @@ The taste report supports copying a structured prompt that contains the complete
 
 ## Yearbook Backup and Restore
 
-"Settings → Download backup" produces versioned JSON containing work data, personal status (Plan to Watch, Watching, Completed), reactions (including "no reaction yet"), notes, watch dates, year configuration, and a limited current Discover cache. After reading the JSON, the app parses a preview first and only writes to the local yearbook after you confirm; a parse failure leaves existing data untouched.
+"Settings → Download backup" produces versioned JSON containing work data, personal status (Plan to Watch, Watching, Completed), ratings (including “not rated”), notes, watch dates, year configuration, and a limited current Discover cache. After reading the JSON, the app parses a preview first and only writes to the local yearbook after you confirm; a parse failure leaves existing data untouched.
 
 The SQL produced by "Export Yearbook Data" is a compatibility export format targeting MySQL/MariaDB, suited to scenarios that need database text. Importing SQL performs restricted parsing and a preview first and only accepts the fixed fields Anime Horizon itself generates; it never executes the SQL in the input. After confirmation, entries are merged by AniList ID and other local works are preserved.
 
@@ -130,7 +130,9 @@ The SQL produced by "Export Yearbook Data" is a compatibility export format targ
 
 ## 🎺 Theme and How It Works
 
-The current interface uses `pics/LizuToAoiTori_sora.png` as its key visual background, moving overall toward the pale blue, airy, sheet-music-line direction of _Liz and the Blue Bird_ and the Kyoto Animation concert-band lineage. Discover keeps new-season-guide-style year and season browsing.
+Anime Horizon is laid out like a quiet seasonal programme that slowly becomes your own yearbook. Each season opens as a chapter: the year and season set in type above a thin watercolour horizon. Below it, every anime is a printed plate and caption standing directly on the paper, with no card around it. Titles you've saved carry a small mark of your own: a short rule and a word for the status (blue for Watching, ink for Completed, dashed for Plan to Watch), with rose kept for “Loved it”. The influence of _Liz and the Blue Bird_ shows in restraint, not in imagery: a paper-and-ink palette, plenty of air, hairline rules and very little motion.
+
+When you browse an earlier season to rebuild your history, Discover's **Add as** control starts on Completed (the current and future seasons start on Plan to Watch). It's always visible and can be changed before you click. Adding a title records only when it was added: watch dates stay blank until you fill them in, so Journey never shows a guessed date.
 
 How the reflective parts work:
 

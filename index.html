@@ -8,7 +8,7 @@
       name="description"
       content="Browse each anime season, keep a personal archive of what you watch, and look back on your taste."
     />
-    <meta name="theme-color" content="#fbfaf7" />
+    <meta name="theme-color" content="#f6f4ef" />
     <link rel="icon" href="/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="/favicon.png" />
     <meta property="og:title" content="Anime Horizon" />
@@ -17,33 +17,40 @@
       content="Seasonal anime guide and personal anime archive in English, 日本語 and 简体中文."
     />
     <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Sans for interface and captions; serif (Latin, Japanese mincho, Chinese song) for editorial display type. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Outfit:wght@400;500;600;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600&family=Outfit:wght@400;500;600&family=Shippori+Mincho:wght@500;600&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --ah-paper: #fbfaf7;
-        --ah-surface: #fffefd;
-        --ah-surface-blue: #f2f7fb;
-        /* Text, links and filled buttons: >= 4.5:1 on paper, surface and pale-blue panels. */
-        --ah-primary: #3870a9;
-        --ah-primary-strong: #2f6399;
-        /* The original airy sky blue, kept for decorative fills and shadows only. */
-        --ah-sky-tint: #629fdc;
-        --ah-primary-soft: #dceafa;
-        --ah-ink: #26364d;
-        --ah-muted: #5f6e83;
-        /* Blush pink is decorative only; use --ah-rose for pink text or filled controls. */
-        --ah-pink: #e8aeb8;
-        --ah-rose: #b04a62;
-        --ah-rose-strong: #943d52;
-        --ah-border: rgba(91, 124, 160, 0.14);
+        /* Paper is the field; ink is the structure. Blue and rose are rare accents, never decoration. */
+        --ah-paper: #f6f4ef;
+        --ah-surface: #fbfaf7;
+        --ah-surface-blue: #eef1f4;
+        /* Bird blue: current/selected state, primary actions and the user's own marks (>= 5:1 on paper). */
+        --ah-primary: #33689e;
+        --ah-primary-strong: #2b5b8c;
+        /* Decorative fills only (not text). */
+        --ah-sky-tint: #8fb3d6;
+        --ah-primary-soft: #dfe8f1;
+        --ah-ink: #1d2735;
+        --ah-muted: #59626f;
+        /* Rose marks affection (Loved) and destructive confirmation only. --ah-pink is decorative only. */
+        --ah-pink: #e3b3bd;
+        --ah-rose: #a8435b;
+        --ah-rose-strong: #8f3850;
+        --ah-border: rgba(29, 39, 53, 0.13);
+        --ah-rule: rgba(29, 39, 53, 0.72);
         --ah-page-width: 1280px;
-        --ah-radius-sm: 8px;
-        --ah-radius-md: 14px;
-        --ah-radius-lg: 20px;
-        --ah-shadow-soft: 0 12px 35px rgba(59, 95, 132, 0.08);
+        /* Printed images and paper edges: nearly square. */
+        --ah-radius-sm: 2px;
+        --ah-radius-md: 2px;
+        --ah-radius-lg: 3px;
+        /* Only overlays (dialogs, toasts) lift off the page. */
+        --ah-shadow-soft: 0 18px 50px rgba(29, 39, 53, 0.14);
         --ah-transition: 180ms ease;
       }
       body {
@@ -51,20 +58,6 @@
         color: var(--ah-ink);
         overflow-x: hidden;
         min-height: 100vh;
-      }
-
-      /* Noise Texture Overlay */
-      body::before {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
-        pointer-events: none;
-        z-index: 40;
-        opacity: 0.18;
       }
 
       .scrollbar-hide::-webkit-scrollbar {
@@ -94,11 +87,12 @@
         background: var(--ah-paper);
       }
 
+      /* A running head: small, tracked, muted ink. */
       .ah-section-label {
-        color: var(--ah-primary);
+        color: var(--ah-muted);
         font-size: 0.6875rem;
-        font-weight: 700;
-        letter-spacing: 0.24em;
+        font-weight: 500;
+        letter-spacing: 0.22em;
         text-transform: uppercase;
       }
 
@@ -114,21 +108,19 @@
       }
 
       .ah-entry {
-        animation: ahEntry 520ms ease both;
+        animation: ahEntry 600ms ease both;
       }
 
       .ah-entry-delay {
-        animation: ahEntry 520ms 80ms ease both;
+        animation: ahEntry 600ms 90ms ease both;
       }
 
       @keyframes ahEntry {
         from {
           opacity: 0;
-          transform: translateY(10px);
         }
         to {
           opacity: 1;
-          transform: translateY(0);
         }
       }
 

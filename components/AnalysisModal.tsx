@@ -93,14 +93,14 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-sky-950/45 backdrop-blur-xl animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1d2735]/40 animate-fade-in">
       <div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="analysis-title"
-        className="bg-white/[0.92] text-slate-800 w-full max-w-3xl rounded-[1.75rem] border border-white/70 shadow-[0_30px_100px_rgba(14,116,144,0.32)] overflow-hidden flex flex-col max-h-[90vh] relative"
+        className="bg-white/[0.92] text-slate-800 w-full max-w-3xl rounded-[1.75rem] border border-white/70 shadow-[var(--ah-shadow-soft)] overflow-hidden flex flex-col max-h-[90vh] relative"
       >
         {/* Decorative Background */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(14,116,144,0.06)_1px,transparent_1px)] bg-[size:100%_34px] pointer-events-none"></div>
@@ -109,7 +109,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
         <div className="p-6 border-b border-sky-100 flex justify-between items-center bg-gradient-to-r from-sky-50 to-rose-50 relative z-10">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.24em] text-sky-700">{t('analysis.eyebrow')}</p>
-            <h2 id="analysis-title" className="mt-1 text-2xl font-black text-slate-900 font-jp">
+            <h2 id="analysis-title" className="mt-1 text-2xl font-black text-slate-900 font-display">
               {t('analysis.title')}
             </h2>
             <p className="text-sm text-slate-600 mt-1">{t('analysis.count', { count })}</p>
@@ -245,7 +245,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
                 <>
                   {/* Tags */}
                   {visibleTags.length > 0 && (
-                    <div className="bg-white/75 rounded-2xl p-4 border border-sky-100 shadow-sm flex flex-wrap gap-2">
+                    <div className="bg-white/75 rounded-[var(--ah-radius-lg)] p-4 border border-sky-100 shadow-sm flex flex-wrap gap-2">
                       {visibleTags.map((tag, idx) => (
                         <span
                           key={`tag-${idx}`}
@@ -259,7 +259,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
                   {/* Roast Card */}
                   {!isPlaceholderText(data.roast) && (
-                    <div className="bg-white/75 rounded-2xl p-6 border border-rose-100 shadow-sm">
+                    <div className="bg-white/75 rounded-[var(--ah-radius-lg)] p-6 border border-rose-100 shadow-sm">
                       <h3 className="text-lg font-black text-rose-700 mb-3 flex items-center gap-2">
                         {t('analysis.section.review')}
                       </h3>
@@ -269,7 +269,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
                   {/* Personality Card */}
                   {!isPlaceholderText(data.personality) && (
-                    <div className="bg-white/75 rounded-2xl p-6 border border-sky-100 shadow-sm">
+                    <div className="bg-white/75 rounded-[var(--ah-radius-lg)] p-6 border border-sky-100 shadow-sm">
                       <h3 className="text-lg font-black text-sky-600 mb-3 flex items-center gap-2">
                         {t('analysis.section.personality')}
                       </h3>
@@ -281,7 +281,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
 
                   {/* Golden Era */}
                   {!isPlaceholderText(data.goldenEra) && (
-                    <div className="bg-white/75 rounded-2xl p-6 border border-sky-100 shadow-sm">
+                    <div className="bg-white/75 rounded-[var(--ah-radius-lg)] p-6 border border-sky-100 shadow-sm">
                       <h3 className="text-lg font-black text-sky-600 mb-3 flex items-center gap-2">
                         {t('analysis.section.goldenEra')}
                       </h3>
@@ -290,7 +290,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
                   )}
 
                   {data.questions.length > 0 && (
-                    <div className="bg-white/75 rounded-2xl p-6 border border-sky-100 shadow-sm">
+                    <div className="bg-white/75 rounded-[var(--ah-radius-lg)] p-6 border border-sky-100 shadow-sm">
                       <h3 className="text-lg font-black text-sky-600 mb-3">{t('analysis.section.questions')}</h3>
                       <ul className="list-disc space-y-2 pl-5 text-slate-700 leading-relaxed">
                         {data.questions.map((question, idx) => (
@@ -300,7 +300,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
                     </div>
                   )}
 
-                  <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-5">
+                  <div className="rounded-[var(--ah-radius-lg)] border border-sky-100 bg-sky-50/70 p-5">
                     <p className="text-sm leading-6 text-slate-700">{t('analysis.forYouNote')}</p>
                     <button
                       type="button"
@@ -337,7 +337,7 @@ export const AnalysisModal: React.FC<AnalysisModalProps> = ({
         <div className="p-4 border-t border-sky-100 bg-white/70 text-center relative z-10">
           <button
             onClick={onClose}
-            className="w-full py-3 rounded-2xl bg-sky-700 hover:bg-sky-800 text-white font-bold transition-all shadow-lg shadow-sky-100"
+            className="w-full py-3 rounded-[var(--ah-radius-lg)] bg-sky-700 hover:bg-sky-800 text-white font-bold transition-all shadow-lg shadow-sky-100"
           >
             {t('common.close')}
           </button>

@@ -75,19 +75,19 @@ export const SqlExportModal: React.FC<SqlExportModalProps> = ({ isOpen, onClose,
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-xl animate-fade-in sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-[#1d2735]/40 p-4 animate-fade-in sm:items-center">
       <div
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sql-export-title"
-        className="my-2 flex max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-4xl flex-col overflow-hidden rounded-[var(--ah-radius-lg)] border border-white/10 bg-[#121212] shadow-[0_0_50px_rgba(0,0,0,0.5)] sm:my-0"
+        className="my-2 flex max-h-[calc(100dvh-2rem)] min-h-0 w-full max-w-4xl flex-col overflow-hidden rounded-[var(--ah-radius-lg)] border border-white/10 bg-[#121212] shadow-[var(--ah-shadow-soft)] sm:my-0"
       >
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-white/5 bg-gradient-to-r from-blue-600/10 to-transparent p-5 sm:p-6">
           <div>
-            <h2 id="sql-export-title" className="font-jp text-xl font-bold text-blue-400">
+            <h2 id="sql-export-title" className="font-display text-xl font-bold text-blue-400">
               {t('sqlExport.title')}
             </h2>
             <p className="text-xs text-gray-500 mt-1.5 font-mono">

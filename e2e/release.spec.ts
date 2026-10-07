@@ -82,8 +82,10 @@ test.describe('release hardening', () => {
     await seedRaw(page, JSON.stringify([record('4242')]));
     await page.goto('/');
 
-    const card = page.locator('article').filter({ hasText: 'Saved 4242' }).first();
-    await expect(card.getByText('In My Anime')).toBeVisible();
+    // The saved title carries the user's own mark and offers no add or remove action.
+    const card = page.locator('#catalogue article').filter({ hasText: 'Saved 4242' });
+    await expect(card.getByText('Loved it')).toBeVisible();
+    await expect(card.getByRole('button')).toHaveCount(0);
     await card.getByRole('img', { name: 'Saved 4242' }).click();
     await card.getByRole('heading', { name: 'Saved 4242' }).click();
     await expect(page.getByText(/Removed .* from your archive/)).toHaveCount(0);

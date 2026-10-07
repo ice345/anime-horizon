@@ -59,7 +59,7 @@ test.describe('personal history', () => {
     await page.goto('/my-anime');
 
     const card = page.locator('main article').filter({ hasText: 'Old Show' });
-    await card.getByRole('button', { name: 'Edit note' }).click();
+    await card.getByRole('button', { name: 'Edit rating & note' }).click();
     const history = historyGroup(page, card);
     // Migration never invents dates: all three are unknown.
     await expect(history.getByText('Unknown')).toHaveCount(3);
@@ -72,7 +72,7 @@ test.describe('personal history', () => {
     await page
       .locator('main article')
       .filter({ hasText: 'Old Show' })
-      .getByRole('button', { name: 'Edit note' })
+      .getByRole('button', { name: 'Edit rating & note' })
       .click();
     const reopened = historyGroup(page, page.locator('main article').filter({ hasText: 'Old Show' }));
     await expect(reopened.getByLabel(/^Completed/)).toHaveValue('2019');
@@ -85,7 +85,7 @@ test.describe('personal history', () => {
   test('adding and progressing a title records added, started and completed dates', async ({ page }) => {
     await mockAniList(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Add to archive: New Show' }).click();
+    await page.locator('#catalogue').getByRole('button', { name: 'Add to archive: New Show' }).click();
     await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'My Anime' }).click();
     // Stay on "All" so the title remains in view as its status changes.
     await page.getByRole('group', { name: 'Filter by status' }).getByRole('button', { name: /^All/ }).click();
@@ -105,16 +105,16 @@ test.describe('personal history', () => {
 
     await page.reload();
     const card = page.locator('main article').filter({ hasText: 'New Show' });
-    await card.getByRole('button', { name: 'Write a note' }).click();
+    await card.getByRole('button', { name: 'Rate or add a note' }).click();
     const today = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date());
     await expect(historyGroup(page, card).getByText(today)).toHaveCount(3);
   });
 });
 
 const LOCALES = [
-  { browser: 'en-US', open: 'Edit note', group: 'History', unknown: 'Unknown' },
-  { browser: 'ja-JP', open: '感想を編集', group: '視聴の記録', unknown: '記録なし' },
-  { browser: 'zh-CN', open: '编辑点评', group: '观看记录', unknown: '未记录' },
+  { browser: 'en-US', open: 'Edit rating & note', group: 'History', unknown: 'Unknown' },
+  { browser: 'ja-JP', open: '評価・メモを編集', group: '視聴の記録', unknown: '記録なし' },
+  { browser: 'zh-CN', open: '编辑评价与短评', group: '观看记录', unknown: '未记录' },
 ];
 
 for (const locale of LOCALES) {

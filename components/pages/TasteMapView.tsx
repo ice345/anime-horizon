@@ -10,6 +10,7 @@ import {
 import { getDisplayTitle } from '../../shared/i18n/animeTitle';
 import { genreLabel } from '../../shared/i18n/genres';
 import { useI18n } from '../../shared/i18n/useI18n';
+import { StatusRule } from '../AnimeCard';
 import { Anime } from '../../types';
 
 interface TasteMapViewProps {
@@ -38,10 +39,9 @@ const STANCE_TONE: Record<Stance, string> = {
   insufficient: 'text-yearbook-muted',
 };
 
-const h3Class = 'font-jp text-lg font-medium text-yearbook-ink';
-const sectionClass = 'border-t border-yearbook-line pt-5';
-const actionClass =
-  'min-h-11 border border-yearbook-line bg-yearbook-surface px-4 text-sm font-medium text-yearbook-ink transition hover:bg-yearbook-blue';
+const h3Class = 'font-display text-[1.375rem] leading-tight text-yearbook-ink';
+const sectionClass = 'border-t border-yearbook-rule pt-4';
+const actionClass = 'ah-button-quiet';
 
 /** Journey → Taste Map: a calm, evidence-first reading of exposure, preference and intent. */
 export const TasteMapView: React.FC<TasteMapViewProps> = ({
@@ -76,14 +76,12 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
         <span className={`text-xs font-medium ${STANCE_TONE[item.stance]}`}>
           {t(stanceKey(item.stance))}
           {item.evidence === 'limited' && (
-            <span className="ml-2 border border-yearbook-line px-1.5 py-0.5 font-normal text-yearbook-muted">
-              {t('tasteMap.limited')}
-            </span>
+            <span className="ml-2 font-normal text-yearbook-muted">{t('tasteMap.limited')}</span>
           )}
         </span>
       </div>
       <p className="mt-1 text-xs leading-5 text-yearbook-muted">{evidenceLine(item)}</p>
-      <details className="mt-1 text-xs leading-5 text-yearbook-muted">
+      <details className="ah-disclosure mt-1 text-xs leading-5 text-yearbook-muted">
         <summary className="inline-flex min-h-9 cursor-pointer items-center font-medium text-yearbook-sky">
           {t('tasteMap.why')}
         </summary>
@@ -119,8 +117,8 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
   const titleList = (heading: string, items: Anime[]) =>
     items.length > 0 && (
       <div>
-        <h4 className="text-xs font-medium text-yearbook-ink">{heading}</h4>
-        <ul className="mt-1 space-y-1 text-sm leading-6 text-yearbook-ink">
+        <h4 className="ah-section-label">{heading}</h4>
+        <ul className="mt-2 space-y-1 font-display text-[17px] leading-7 text-yearbook-ink">
           {items.map((anime) => (
             <li key={anime.id}>{titleOf(anime)}</li>
           ))}
@@ -130,7 +128,7 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
 
   const intro = (
     <>
-      <h2 id="taste-map-title" className="font-jp text-3xl font-medium text-yearbook-ink">
+      <h2 id="taste-map-title" className="font-display text-[2.25rem] leading-tight text-yearbook-ink">
         {t('tasteMap.title')}
       </h2>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-yearbook-muted">{t('tasteMap.intro')}</p>
@@ -141,15 +139,11 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
     return (
       <section aria-labelledby="taste-map-title" className="max-w-3xl">
         {intro}
-        <div className="mt-8 border-y border-dashed border-yearbook-line px-5 py-10 text-center">
-          <h3 className="font-jp text-2xl font-medium text-yearbook-ink">{t('tasteMap.empty.title')}</h3>
+        <div className="mt-8 border-y border-yearbook-line px-5 py-10 text-center">
+          <h3 className="font-display text-2xl text-yearbook-ink">{t('tasteMap.empty.title')}</h3>
           <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-yearbook-muted">{t('tasteMap.empty.body')}</p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <button
-              type="button"
-              onClick={onDiscover}
-              className="min-h-11 bg-yearbook-sky px-5 text-sm font-medium text-white transition hover:bg-yearbook-sky-strong"
-            >
+            <button type="button" onClick={onDiscover} className="ah-button">
               {t('tasteMap.empty.discover')}
             </button>
             <button type="button" onClick={onMyAnime} className={actionClass}>
@@ -167,12 +161,10 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
         {t('tasteMap.section.intent')}
       </h3>
       <p className="mt-1 text-xs leading-5 text-yearbook-muted">{t('tasteMap.section.intentNote')}</p>
-      <ul className="mt-3 flex flex-wrap gap-2">
+      <ul className="mt-3 grid gap-x-6 gap-y-1 text-sm text-yearbook-ink sm:grid-cols-2">
         {model.intentGenres.slice(0, 8).map((item) => (
-          <li
-            key={item.key}
-            className="border border-yearbook-line bg-yearbook-surface px-3 py-1.5 text-xs text-yearbook-ink"
-          >
+          <li key={item.key} className="flex items-baseline gap-2 py-0.5">
+            <StatusRule status="PLAN" />
             {t('tasteMap.intentRow', { name: genreName(item.key), count: item.planned })}
           </li>
         ))}
@@ -184,7 +176,7 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
     return (
       <section aria-labelledby="taste-map-title" className="max-w-3xl space-y-8">
         <div>{intro}</div>
-        <div className="border-l-2 border-yearbook-sky bg-yearbook-surface/80 px-5 py-5">
+        <div className="border-l border-yearbook-rule py-1 pl-5">
           <h3 className={h3Class}>{t('tasteMap.intentOnly.title')}</h3>
           <p className="mt-2 text-sm leading-6 text-yearbook-muted">{t('tasteMap.intentOnly.body')}</p>
           <button type="button" onClick={onMyAnime} className={`mt-4 ${actionClass}`}>
@@ -213,7 +205,7 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
       </div>
 
       {model.state === 'unrated' && (
-        <div className="border-l-2 border-yearbook-sky bg-yearbook-surface/80 px-5 py-4 text-sm leading-6 text-yearbook-muted">
+        <div className="border-l border-yearbook-rule py-1 pl-5 text-sm leading-6 text-yearbook-muted">
           <p>{t('tasteMap.unrated')}</p>
           <button type="button" onClick={onMyAnime} className={`mt-3 ${actionClass}`}>
             {t('tasteMap.empty.myAnime')}
@@ -221,7 +213,7 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
         </div>
       )}
       {model.state === 'sparse' && (
-        <p className="border-l-2 border-yearbook-sky bg-yearbook-surface/80 px-5 py-4 text-sm leading-6 text-yearbook-muted">
+        <p className="border-l border-yearbook-rule py-1 pl-5 text-sm leading-6 text-yearbook-muted">
           {t('tasteMap.sparse', { count: totals.rated })}
         </p>
       )}
@@ -239,7 +231,7 @@ export const TasteMapView: React.FC<TasteMapViewProps> = ({
                     {stances[stance].slice(0, ROWS_SHOWN).map(genreRow)}
                   </ul>
                   {stances[stance].length > ROWS_SHOWN && (
-                    <details>
+                    <details className="ah-disclosure">
                       <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm font-medium text-yearbook-sky">
                         {t('tasteMap.showMore', { count: stances[stance].length - ROWS_SHOWN })}
                       </summary>

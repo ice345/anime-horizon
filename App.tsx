@@ -5,7 +5,6 @@ import { ArchiveRecoveryNotice } from './components/ArchiveRecoveryNotice';
 import { MyAnimePage } from './components/pages/MyAnimePage';
 import { NotFoundPage } from './components/pages/NotFoundPage';
 import { SettingsPage } from './components/pages/SettingsPage';
-import { DecorativeBackground } from './components/home/DecorativeBackground';
 import { SiteHeader } from './components/home/SiteHeader';
 import { YearNavigation } from './components/home/YearNavigation';
 import { CatalogueError, clearAnimeCache } from './services/anilistService';
@@ -22,6 +21,8 @@ import {
   TasteAnalysisResult,
 } from './services/geminiService';
 import { Anime, UserAnimeStatus } from './types';
+import { AddMode } from './features/archive/addMode';
+import { canQuickRemove, RecentAdds, withoutRecentAdd, withRecentAdd } from './features/archive/quickToggle';
 import { BackupError, createBackup, NormalizedBackup, parseAndMigrateBackup } from './features/backup/backupSchema';
 import { useI18n } from './shared/i18n/useI18n';
 import { getDisplayTitle } from './shared/i18n/animeTitle';
@@ -153,11 +154,16 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState<AIErrorDescription | null>(null);
   const analysisInFlightRef = useRef(false);
   const [feedback, setFeedback] = useState<FeedbackMessage | null>(null);
-  // The most recently removed archive entry, kept so the removal toast can restore it intact.
-  const [undoEntry, setUndoEntry] = useState<Anime | null>(null);
+  /**
+   * The most recently removed archive entry, kept so the toast can restore it intact. `recent` marks a
+   * Discover quick toggle, so restoring it also makes it a just-added title again.
+   */
+  const [undo, setUndo] = useState<{ entry: Anime; recent: boolean } | null>(null);
+  // Titles added from Discover during this visit, for the quick toggle (memory only; see quickToggle.ts).
+  const [recentAdds, setRecentAdds] = useState<RecentAdds>(() => new Map());
 
   const showFeedback = useCallback((key: MessageKey, params?: MessageParams) => {
-    setUndoEntry(null);
+    setUndo(null);
     setFeedback({ key, params });
   }, []);
 
@@ -170,7 +176,7 @@ export default function App() {
   );
 
   const dismissFeedback = () => {
-    setUndoEntry(null);
+    setUndo(null);
     setFeedback(null);
   };
 
@@ -295,7 +301,7 @@ export default function App() {
     setSelectedAnimeDetails(new Map());
     clearAnalyses();
     setAnalysisError(null);
-    setUndoEntry(null);
+    setUndo(null);
     try {
       clearArchiveState();
     } catch {
@@ -342,7 +348,7 @@ export default function App() {
     setSelectedIds(new Set([...selectedIds, ...nextDetails.keys()]));
     clearAnalyses();
     setAnalysisError(null);
-    setUndoEntry(null);
+    setUndo(null);
   };
 
   const handleApplyJsonBackup = (backup: NormalizedBackup) => {
@@ -358,17 +364,25 @@ export default function App() {
     mergeIntoArchive(anime);
   };
 
-  const addAnime = (anime: Anime) => {
+  /** Adds a title as PLAN, or with the status the user chose in Discover's visible "add as" control. */
+  const addAnime = (anime: Anime, status?: AddMode): Anime | null => {
     const id = String(anime.id);
-    if (selectedAnimeDetails.has(id)) return;
+    if (selectedAnimeDetails.has(id)) return null;
+    const entry = createArchiveEntry(anime, new Date(), status);
     const nextDetails = new Map(selectedAnimeDetails);
-    nextDetails.set(id, createArchiveEntry(anime));
+    nextDetails.set(id, entry);
     setSelectedAnimeDetails(nextDetails);
     setSelectedIds(new Set([...selectedIds, id]));
+    // A pending "restore" for this title is now stale; the title is back by a newer action.
+    if (undo && String(undo.entry.id) === id) {
+      setUndo(null);
+      setFeedback(null);
+    }
+    return entry;
   };
 
   // Every removal keeps the full entry (status, reaction, note) so the toast can undo it.
-  const removeAnime = (id: string) => {
+  const removeAnime = (id: string, options: { feedbackKey?: MessageKey; recent?: boolean } = {}) => {
     const removed = selectedAnimeDetails.get(id);
     const nextIds = new Set(selectedIds);
     const nextDetails = new Map(selectedAnimeDetails);
@@ -376,20 +390,27 @@ export default function App() {
     nextDetails.delete(id);
     setSelectedIds(nextIds);
     setSelectedAnimeDetails(nextDetails);
+    setRecentAdds((previous) => (previous.has(id) ? withoutRecentAdd(previous, id) : previous));
     if (removed) {
-      setFeedback({ key: 'feedback.removed', params: { title: titleOf(removed) } });
-      setUndoEntry(removed);
+      setFeedback({ key: options.feedbackKey ?? 'feedback.removed', params: { title: titleOf(removed) } });
+      setUndo({ entry: removed, recent: Boolean(options.recent) });
     }
   };
 
   const undoRemoval = () => {
-    if (!undoEntry) return;
-    const id = String(undoEntry.id);
+    if (!undo) return;
+    const id = String(undo.entry.id);
+    // Stale: the title is already back (for example added again), so restoring would overwrite it.
+    if (selectedAnimeDetails.has(id)) {
+      dismissFeedback();
+      return;
+    }
     const nextDetails = new Map(selectedAnimeDetails);
-    nextDetails.set(id, undoEntry);
+    nextDetails.set(id, undo.entry);
     setSelectedAnimeDetails(nextDetails);
     setSelectedIds(new Set([...selectedIds, id]));
-    showFeedback('feedback.restored', { title: titleOf(undoEntry) });
+    if (undo.recent) setRecentAdds((previous) => withRecentAdd(previous, undo.entry));
+    showFeedback('feedback.restored', { title: titleOf(undo.entry) });
   };
 
   const toggleAnime = (id: string, anime: Anime) => {
@@ -401,9 +422,25 @@ export default function App() {
    * Discover, Featured and search are add-only: looking at or clicking a saved title there never
    * removes it. Removal is an explicit, confirmed action in My Anime.
    */
-  const addFromCatalogue = (anime: Anime) => {
-    if (!selectedIds.has(String(anime.id))) addAnime(anime);
+  const addFromCatalogue = (anime: Anime, status?: AddMode) => {
+    if (!selectedIds.has(String(anime.id))) addAnime(anime, status);
   };
+
+  /** Discover's catalogue and lead: an add that the user can take back by clicking the title again. */
+  const addFromDiscover = (anime: Anime, status: AddMode) => {
+    const entry = addAnime(anime, status);
+    if (entry) setRecentAdds((previous) => withRecentAdd(previous, entry));
+  };
+
+  /** Takes back a Discover add, only while the record is exactly what that add created. */
+  const quickRemoveFromDiscover = (anime: Anime) => {
+    const id = String(anime.id);
+    if (!canQuickRemove(recentAdds, selectedAnimeDetails, id)) return;
+    removeAnime(id, { feedbackKey: 'feedback.addUndone', recent: true });
+  };
+  const isQuickRemovable = (id: string) => canQuickRemove(recentAdds, selectedAnimeDetails, id);
+  // The quick toggle covers one visit to Discover; elsewhere, saved titles are established records.
+  if (route.name !== 'discover' && recentAdds.size > 0) setRecentAdds(new Map());
 
   // Status changes record user history (startedAt / completedAt / updatedAt); see applyStatusChange.
   const handleUpdateAnimeStatus = (id: string, userStatus: UserAnimeStatus) => {
@@ -478,8 +515,7 @@ export default function App() {
   };
 
   return (
-    <div className="ah-shell relative overflow-hidden font-sans text-yearbook-ink">
-      <DecorativeBackground />
+    <div className="ah-shell relative overflow-x-clip font-sans text-yearbook-ink">
       <SiteHeader active={route.name} onNavigate={goTo} onSearch={() => setIsGlobalSearchOpen(true)} />
       {integrityIssue && (
         <ArchiveRecoveryNotice
@@ -503,7 +539,9 @@ export default function App() {
           year={displayedYear}
           selectedIds={selectedIds}
           selectedAnime={fullArchive}
-          onToggle={(_id, anime) => addFromCatalogue(anime)}
+          onAdd={addFromDiscover}
+          onQuickRemove={quickRemoveFromDiscover}
+          isQuickRemovable={isQuickRemovable}
           onOpenMyAnime={(tab?: MyAnimeTab) => navigateTo({ name: 'myAnime', status: tab })}
           onOpenRecommendations={() => setIsRecommendationsOpen(true)}
           onAnimeLoaded={setAnimeList}
@@ -605,7 +643,7 @@ export default function App() {
             isOpen={isGlobalSearchOpen}
             onClose={() => setIsGlobalSearchOpen(false)}
             selectedIds={selectedIds}
-            onToggle={addFromCatalogue}
+            onToggle={(anime) => addFromCatalogue(anime)}
             minYear={DEFAULT_START_YEAR}
             maxYear={DEFAULT_END_YEAR}
           />
@@ -632,25 +670,22 @@ export default function App() {
 
       {feedback && (
         <div
+          key={`${feedback.key}:${JSON.stringify(feedback.params ?? {})}`}
           role="status"
           aria-live="polite"
-          className="fixed inset-x-4 bottom-5 z-[100] mx-auto flex w-fit max-w-xl items-center gap-3 border border-yearbook-line bg-white px-4 py-3 text-sm text-yearbook-ink shadow-[var(--ah-shadow-soft)]"
+          className="ah-reveal fixed inset-x-4 bottom-5 z-[100] mx-auto flex w-fit max-w-xl items-center gap-4 bg-yearbook-ink px-4 py-3 text-sm text-yearbook-paper shadow-[var(--ah-shadow-soft)]"
         >
           <span>{t(feedback.key, feedback.params)}</span>
-          {undoEntry && (
+          {undo && (
             <button
               type="button"
-              className="shrink-0 font-medium text-yearbook-sky underline underline-offset-4 hover:text-yearbook-ink"
+              className="shrink-0 font-medium text-yearbook-paper underline underline-offset-4 hover:text-white"
               onClick={undoRemoval}
             >
               {t('common.undo')}
             </button>
           )}
-          <button
-            type="button"
-            className="shrink-0 font-medium text-yearbook-sky hover:text-yearbook-ink"
-            onClick={dismissFeedback}
-          >
+          <button type="button" className="shrink-0 text-yearbook-paper/75 hover:text-white" onClick={dismissFeedback}>
             {t('common.dismiss')}
           </button>
         </div>

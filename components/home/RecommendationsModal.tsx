@@ -175,18 +175,17 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
     const exploration = explorationText(reason);
     const details = detailLines(item);
     return (
-      <li
-        key={anime.id}
-        className="flex min-w-0 gap-4 border border-yearbook-line bg-white p-3 shadow-[0_8px_24px_rgba(59,95,132,0.055)]"
-      >
-        <img
-          src={anime.coverImage.large || anime.coverImage.extraLarge}
-          alt=""
-          className="h-28 w-20 shrink-0 bg-yearbook-blue object-cover"
-          loading="lazy"
-        />
+      <li key={anime.id} className="flex min-w-0 gap-4 border-t border-yearbook-line pt-4">
+        <span className="ah-plate block aspect-[5/7] w-20 shrink-0 self-start">
+          <img
+            src={anime.coverImage.large || anime.coverImage.extraLarge}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        </span>
         <div className="min-w-0 flex-1">
-          <h4 className="line-clamp-2 text-sm font-medium leading-5 text-yearbook-ink">{title}</h4>
+          <h4 className="line-clamp-2 font-display text-[17px] leading-6 text-yearbook-ink">{title}</h4>
           <p className="mt-1 text-[11px] text-yearbook-muted">
             {anime.seasonYear || t('common.unknownYear')} ·{' '}
             {anime.genres.length
@@ -196,10 +195,10 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
                 : t('common.anime')}
           </p>
           <p className="mt-2 text-xs leading-5 text-yearbook-ink">{leadText(reason)}</p>
-          {exploration && <p className="mt-1 text-xs leading-5 text-yearbook-sky">{exploration}</p>}
+          {exploration && <p className="mt-1 text-xs leading-5 text-yearbook-muted">{exploration}</p>}
           {details.length > 0 && (
-            <details className="mt-1 text-xs leading-5 text-yearbook-muted">
-              <summary className="inline-flex min-h-9 cursor-pointer items-center font-medium text-yearbook-sky">
+            <details className="ah-disclosure mt-1 text-xs leading-5 text-yearbook-muted">
+              <summary className="inline-flex min-h-9 cursor-pointer items-center text-yearbook-ink underline decoration-yearbook-line underline-offset-4">
                 {t('recommendations.why')}
               </summary>
               <ul className="space-y-1">
@@ -209,12 +208,12 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
               </ul>
             </details>
           )}
-          <div className="mt-1 flex justify-end">
+          <div className="mt-1">
             <button
               type="button"
               onClick={() => add(anime)}
               aria-label={t('recommendations.addAria', { title })}
-              className="min-h-11 px-2 text-sm font-medium text-yearbook-sky transition hover:text-yearbook-ink"
+              className="min-h-11 text-[13px] font-medium text-yearbook-sky transition hover:text-yearbook-ink"
             >
               {t('recommendations.add')}
             </button>
@@ -237,19 +236,19 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
   const hasResults = !isLoading && shownCount > 0;
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-start justify-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[85] flex items-start justify-center overflow-y-auto bg-[#1d2735]/40 p-4">
       <section
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="recommendation-title"
-        className="my-4 w-full max-w-6xl overflow-hidden rounded-[var(--ah-radius-lg)] border border-white/80 bg-yearbook-surface shadow-[0_28px_90px_rgba(38,54,77,0.22)] sm:my-8"
+        className="my-4 w-full max-w-6xl overflow-hidden rounded-[var(--ah-radius-lg)] bg-yearbook-paper shadow-[var(--ah-shadow-soft)] sm:my-8"
       >
-        <div className="flex items-start justify-between gap-5 border-b border-yearbook-line bg-yearbook-blue/45 px-5 py-5 sm:px-7">
-          <div>
+        <div className="flex items-start justify-between gap-5 border-b border-yearbook-line px-5 py-6 sm:px-8">
+          <div className="min-w-0 flex-1">
             <p className="ah-section-label">{t('recommendations.eyebrow')}</p>
-            <h2 id="recommendation-title" className="mt-2 font-jp text-2xl font-medium text-yearbook-ink">
+            <h2 id="recommendation-title" className="mt-2 font-display text-[2rem] leading-tight text-yearbook-ink">
               {t('recommendations.title')}
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-yearbook-muted">
@@ -274,20 +273,20 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
             type="button"
             aria-label={t('recommendations.close')}
             onClick={onClose}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-yearbook-muted transition hover:bg-white hover:text-yearbook-ink"
+            className="grid h-11 w-11 shrink-0 place-items-center text-yearbook-muted transition hover:text-yearbook-ink"
           >
             ×
           </button>
         </div>
 
-        <div className="space-y-8 p-5 sm:p-7">
+        <div className="space-y-10 p-5 sm:p-8">
           {error && (
-            <p className="border-l-2 border-yearbook-pink bg-rose-50 px-3 py-2 text-sm text-yearbook-ink">
+            <p className="border-l border-yearbook-rule py-1 pl-4 text-sm text-yearbook-ink">
               {t('recommendations.error', { reason: t(error) })}
             </p>
           )}
           {graph?.incomplete && (
-            <p className="border-l-2 border-yearbook-pink bg-rose-50 px-3 py-2 text-sm text-yearbook-ink">
+            <p className="border-l border-yearbook-rule py-1 pl-4 text-sm text-yearbook-ink">
               {t('recommendations.partial')}
             </p>
           )}
@@ -298,28 +297,32 @@ export const RecommendationsModal: React.FC<RecommendationsModalProps> = ({
 
           {hasResults && result.matches.length > 0 && (
             <section aria-labelledby="recommendations-matches">
-              <h3 id="recommendations-matches" className="font-jp text-lg font-medium text-yearbook-ink">
+              <h3 id="recommendations-matches" className="font-display text-[1.375rem] text-yearbook-ink">
                 {result.mode === 'personal'
                   ? t('recommendations.section.matches')
                   : t('recommendations.section.suggestions')}
               </h3>
-              <ul className="mt-3 grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">{result.matches.map(card)}</ul>
+              <ul className="mt-3 grid items-start gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                {result.matches.map(card)}
+              </ul>
             </section>
           )}
 
           {hasResults && result.explore.length > 0 && (
             <section aria-labelledby="recommendations-explore">
-              <h3 id="recommendations-explore" className="font-jp text-lg font-medium text-yearbook-ink">
+              <h3 id="recommendations-explore" className="font-display text-[1.375rem] text-yearbook-ink">
                 {t('recommendations.section.explore')}
               </h3>
               <p className="mt-1 text-xs leading-5 text-yearbook-muted">{t('recommendations.section.exploreNote')}</p>
-              <ul className="mt-3 grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">{result.explore.map(card)}</ul>
+              <ul className="mt-3 grid items-start gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                {result.explore.map(card)}
+              </ul>
             </section>
           )}
 
           {onList.length > 0 && (
             <section aria-labelledby="recommendations-on-list" className="border-t border-yearbook-line pt-5">
-              <h3 id="recommendations-on-list" className="font-jp text-lg font-medium text-yearbook-ink">
+              <h3 id="recommendations-on-list" className="font-display text-[1.375rem] text-yearbook-ink">
                 {t('recommendations.section.onList')}
               </h3>
               <ul className="mt-2 divide-y divide-yearbook-line/70">
